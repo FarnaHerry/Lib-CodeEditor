@@ -3962,11 +3962,11 @@ View CodeEditor(EditorOptions options, EditorController controller) {
   // composed here unless the caller opted out (built_in_search_bar = false),
   // in which case they compose the exported EditorSearchBar themselves and
   // mirror visibility through the SearchVisibilityChanged event.
-  auto search_visible = UseState(false);
-  auto search_text = UseState(std::string());
-  auto replace_text = UseState(std::string());
   const EventEmitter events = UseEvents();
-  const bool use_builtin_bar = effective_options.built_in_search_bar;
+  // Search UI is fully decoupled: the component never draws a search panel.
+  // Ctrl+F toggles a reported visibility so applications can show their own
+  // bar (the exported EditorSearchBar or a custom one).
+  auto search_visible = UseState(false);
   detail::EditorControllerAccess::State(controller)->toggle_search =
       [search_visible, events] {
         const bool next = !search_visible.Get();
@@ -3976,13 +3976,7 @@ View CodeEditor(EditorOptions options, EditorController controller) {
   View editor = Canvas([](PaintContext&, Size) {}).With(
       EditorBehavior{&measurer, std::move(effective_options), controller, events}, Focusable{}
   );
-  if (!use_builtin_bar || !search_visible.Get()) {
-    return editor;
-  }
-  return Column {
-    EditorSearchBar(search_text, replace_text, search_visible, controller),
-    std::move(editor).With(Grow{}),
-  }.With(CrossAlign(CrossAxisAlignment::Stretch));
+  return editor;
 }
 
 }  // namespace huxerui::codeeditor

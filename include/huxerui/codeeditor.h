@@ -419,15 +419,15 @@ struct EditorOptions {
   std::vector<std::shared_ptr<EditorDecorationProvider>> decoration_providers;
   // Whether Tab commits the caret-line phantom text supplied by providers.
   bool accept_phantom_on_tab = true;
-  // When true the component draws the default selection/context menu on
-  // long-press / double-tap; when false it emits ContextMenuRequested with the
-  // caret, selection, text, and position instead, and the application builds
-  // its own menu UI.
-  bool built_in_context_menu = true;
-  // When true the component composes its default search bar above the editor;
-  // when false, callers compose the exported EditorSearchBar themselves (or
-  // none) and mirror visibility through the SearchVisibilityChanged event.
-  bool built_in_search_bar = true;
+  // Whether the component draws its own selection/context menu on long-press
+  // or double-tap. Off by default: the editor only emits ContextMenuRequested
+  // (caret, selection, text, position) and the application builds its own UI.
+  bool built_in_context_menu = false;
+  // When true the component composes its default search bar above the editor
+  // (opt-in convenience). Off by default: the component never draws search UI
+  // and Ctrl+F only emits SearchVisibilityChanged; compose the exported
+  // EditorSearchBar (or your own) when search is wanted.
+  bool built_in_search_bar = false;
 
   // Newline action hook: invoked before inserting a newline; may return
   // replacement text.
