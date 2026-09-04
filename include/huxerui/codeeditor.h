@@ -264,6 +264,13 @@ class EditorController {
   // Toggles the component's built-in search bar.
   bool ToggleSearch() const;
 
+  // Clipboard and selection actions for application toolbars (for example a
+  // custom copy/paste bar). Return false when no editor is connected.
+  bool Cut() const;
+  bool Copy() const;
+  bool Paste() const;
+  bool SelectAll() const;
+
   bool operator==(const EditorController&) const = default;
 
  private:

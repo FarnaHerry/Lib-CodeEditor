@@ -3582,6 +3582,10 @@ struct EditorControllerState {
   std::function<void(const std::string&)> replace_all;
   std::function<void()> clear_search;
   std::function<void()> toggle_search;
+  std::function<bool()> cut;
+  std::function<bool()> copy;
+  std::function<bool()> paste;
+  std::function<bool()> select_all;
 };
 
 struct EditorControllerAccess {
@@ -3681,6 +3685,26 @@ bool EditorController::ToggleSearch() const {
   return true;
 }
 
+bool EditorController::Cut() const {
+  const auto& state = detail::EditorControllerAccess::State(*this);
+  return state->cut ? state->cut() : false;
+}
+
+bool EditorController::Copy() const {
+  const auto& state = detail::EditorControllerAccess::State(*this);
+  return state->copy ? state->copy() : false;
+}
+
+bool EditorController::Paste() const {
+  const auto& state = detail::EditorControllerAccess::State(*this);
+  return state->paste ? state->paste() : false;
+}
+
+bool EditorController::SelectAll() const {
+  const auto& state = detail::EditorControllerAccess::State(*this);
+  return state->select_all ? state->select_all() : false;
+}
+
 struct EditorBehavior {
   huxerui::TextMeasurer* measurer = nullptr;
   EditorOptions options;
@@ -3723,6 +3747,27 @@ struct EditorBehavior {
       state->replace_current = [this](const std::string& text) { holder_->ReplaceCurrent(text); };
       state->replace_all = [this](const std::string& text) { holder_->ReplaceAll(text); };
       state->clear_search = [this] { holder_->CloseSearch(); };
+      // Clipboard / selection actions for application toolbars.
+      state->cut = [this] {
+        if (!holder_) return false;
+        holder_->RunContextCommand(0);
+        return true;
+      };
+      state->copy = [this] {
+        if (!holder_) return false;
+        holder_->RunContextCommand(1);
+        return true;
+      };
+      state->paste = [this] {
+        if (!holder_) return false;
+        holder_->RunContextCommand(2);
+        return true;
+      };
+      state->select_all = [this] {
+        if (!holder_) return false;
+        holder_->RunContextCommand(3);
+        return true;
+      };
     }
 
     void Update(MountedNode& node, const EditorBehavior& behavior) {
