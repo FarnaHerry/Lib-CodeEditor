@@ -28,9 +28,9 @@ namespace huxerui::codeeditor {
 //
 //   CodeEditor(options).On<EditorEvents::TextChanged>([] { ... })
 //
-// Information the editor hands back when the selection/context gesture fires
-// and the built-in menu is disabled (built_in_context_menu = false). The
-// application builds its own UI from this data.
+// Information the editor hands back when a selection/context gesture fires.
+// The component never draws a built-in menu; the application builds its own
+// UI from this data.
 struct EditorContextMenuInfo {
   // Caret position (0-based).
   uint32_t cursor_line = 0;
@@ -69,9 +69,8 @@ struct EditorEvents {
   // Fired when the context menu executes an application-defined command id
   // (one outside the built-in set below).
   struct ContextCommandInvoked : huxerui::Event<void(std::int32_t)> {};
-  // Fired instead of the built-in menu when built_in_context_menu is false:
-  // carries the caret/selection/text/position so the application draws its own
-  // selection-and-copy UI.
+  // Fired on long-press and double-tap: carries caret/selection/text/position
+  // so the application draws its own selection-and-copy UI.
   struct ContextMenuRequested : huxerui::Event<void(const EditorContextMenuInfo&)> {};
 };
 
@@ -402,9 +401,9 @@ struct EditorOptions {
   bool insert_spaces = true;
   std::vector<std::pair<char32_t, char32_t>> auto_closing_pairs;
 
-  // Selection/context menu customization. Empty uses the built-in list
-  // (Cut/Copy/Paste/Select All/Find). Supplying a builder replaces the whole
-  // list; ids outside the built-in set fire ContextCommandInvoked.
+  // Deprecated: the component no longer renders a built-in menu or consumes
+  // this list. Long-press/double-tap always fires ContextMenuRequested so the
+  // application draws its own selection UI. Retained for source compatibility.
   std::function<std::vector<EditorContextItem>()> context_menu_items;
 
   // Optional code completion.
@@ -419,9 +418,9 @@ struct EditorOptions {
   std::vector<std::shared_ptr<EditorDecorationProvider>> decoration_providers;
   // Whether Tab commits the caret-line phantom text supplied by providers.
   bool accept_phantom_on_tab = true;
-  // Whether the component draws its own selection/context menu on long-press
-  // or double-tap. Off by default: the editor only emits ContextMenuRequested
-  // (caret, selection, text, position) and the application builds its own UI.
+  // Deprecated no-op: built-in menu rendering was removed. Long-press and
+  // double-tap always emit ContextMenuRequested (caret, selection, text,
+  // position). Retained for source compatibility.
   bool built_in_context_menu = false;
   // When true the component composes its default search bar above the editor
   // (opt-in convenience). Off by default: the component never draws search UI

@@ -1437,119 +1437,25 @@ public:
     }
   }
 
-  // ---- Context menu (long-press / double-tap) ------------------------------
-
-  void ShowContextMenu(const se::PointF& point) {
-    context_menu_.visible = true;
-    context_menu_.anchor = point;
-    context_menu_.entries.clear();
-    if (context_menu_items_) {
-      for (const EditorContextItem& item : context_menu_items_()) {
-        context_menu_.entries.push_back({item.label.c_str(), item.command, item.enabled});
-      }
-    } else {
-      const ContextMenuEntry defaults[] = {
-          {"Cut", 0}, {"Copy", 1}, {"Paste", 2}, {"Select All", 3},
-          {"Find", 4}, {"Fold All", 5}, {"Unfold All", 6},
-      };
-      context_menu_.entries.assign(std::begin(defaults), std::end(defaults));
-    }
-    if (context_menu_.entries.empty()) {
-      context_menu_.visible = false;
-      return;
-    }
-    // Simple anchored sizing: 150px wide, menu row height, clamped to the
-    // viewport so the panel never floats off-screen.
-    const float width = 150.0F;
-    const float row_height = 30.0F;
-    const float height = row_height * static_cast<float>(context_menu_.entries.size()) + 8.0F;
-    const float x = std::clamp(point.x, 0.0F, std::max(0.0F, viewport_.width - width));
-    const float y = std::clamp(point.y, 0.0F, std::max(0.0F, viewport_.height - height));
-    context_menu_.panel_rect = {x, y, width, height};
+  // Clipboard/selection actions used by the application toolbars (the editor
+  // itself no longer draws a built-in menu).
+  bool CutSelectionAction() {
+    const se::EditorActionResult result = core_->deleteText(core_->getSelection().normalized());
+    AfterCoreAction(result);
+    return result.handled;
   }
-
-  void DismissContextMenu() {
-    context_menu_.visible = false;
-    context_menu_.entries.clear();
+  bool CopySelectionAction() {
+    text_input_client_->CopySelection();
+    return true;
   }
-
-  // Returns true when the point hits the open context menu (down swallows it).
-  bool HitContextMenu(const se::PointF& point, int& out_command) const {
-    if (!context_menu_.visible) {
-      return false;
-    }
-    const se::Rect& rect = context_menu_.panel_rect;
-    if (point.x < rect.origin.x || point.x > rect.origin.x + rect.width ||
-        point.y < rect.origin.y || point.y > rect.origin.y + rect.height) {
-      return false;
-    }
-    const float row_height = 30.0F;
-    const size_t index = static_cast<size_t>((point.y - rect.origin.y - 4.0F) / row_height);
-    if (index < context_menu_.entries.size() && context_menu_.entries[index].enabled) {
-      out_command = context_menu_.entries[index].command;
-      return true;
-    }
-    return false;
+  bool PasteSelectionAction() {
+    text_input_client_->PasteFromClipboard();
+    return true;
   }
-
-  void RunContextCommand(int command) {
-    switch (command) {
-    case 0: {
-      const se::EditorActionResult result = core_->deleteText(core_->getSelection().normalized());
-      AfterCoreAction(result);
-      break;
-    }
-    case 1: {
-      // Copy via the runtime clipboard through the text input client.
-      text_input_client_->CopySelection();
-      break;
-    }
-    case 2:
-      text_input_client_->PasteFromClipboard();
-      break;
-    case 3: {
-      const se::EditorActionResult result = core_->selectAll();
-      AfterCoreAction(result);
-      break;
-    }
-    case 4:
-      controller_.ToggleSearch();
-      break;
-    case 5:
-      AfterCoreAction(core_->foldAll());
-      break;
-    case 6:
-      AfterCoreAction(core_->unfoldAll());
-      break;
-    default:
-      // Application-defined command: report it and let the host react.
-      events_.Emit<EditorEvents::ContextCommandInvoked>(command);
-      break;
-    }
-    DismissContextMenu();
-  }
-
-  void DrawContextMenu(PaintContext& paint) {
-    if (!context_menu_.visible) {
-      return;
-    }
-    const se::Rect& rect = context_menu_.panel_rect;
-    paint.DrawRect(ToRect(rect), Argb(0xFFFFFFFF), CornerRadii(6.0F));
-    paint.DrawBorder(ToRect(rect), Argb(0xFFDDDDDD), StrokeStyle{1.0F}, CornerRadii(6.0F));
-    const float row_height = 30.0F;
-    const TextStyle item_style{Font::System(13.0F), Argb(0xFF1F1F1F), TextDecoration::None};
-    float y = rect.origin.y + 4.0F;
-    for (const ContextMenuEntry& entry : context_menu_.entries) {
-      const float baseline = y + (row_height + font_metrics_.descent - font_metrics_.ascent) * 0.5F;
-      const TextStyle style{Font::System(13.0F),
-                            entry.enabled ? Argb(0xFF1F1F1F) : Argb(0xFFB0B0B0), TextDecoration::None};
-      paint.DrawTextRun(
-          Rect{rect.origin.x + 10.0F, y, rect.width - 20.0F, row_height},
-          Point{rect.origin.x + 10.0F, baseline},
-          entry.label,
-          style);
-      y += row_height;
-    }
+  bool SelectAllAction() {
+    const se::EditorActionResult result = core_->selectAll();
+    AfterCoreAction(result);
+    return result.handled;
   }
 
   // Builds the multi-touch GestureEvent for the current pointer event. Touch
@@ -1627,16 +1533,6 @@ public:
   bool HandlePointer(const PointerEvent& event) {
     if (event.type == PointerEventType::Down) {
       suppress_focus_on_up_ = false;
-    }
-    // A down inside the open context menu executes the tapped entry; a down
-    // outside dismisses it (then falls through to the editor).
-    if (event.type == PointerEventType::Down && context_menu_.visible) {
-      int command = -1;
-      if (HitContextMenu(se::PointF{event.position.x, event.position.y}, command)) {
-        RunContextCommand(command);
-        return true;
-      }
-      DismissContextMenu();
     }
     // Scrollbar thumb dragging takes priority over the editor gestures.
     if (scrollbar_dragging_) {
@@ -1822,14 +1718,6 @@ public:
         const se::EditorActionResult result = core_->deleteLine();
         AfterCoreAction(result);
         return result.handled;
-      }
-      // Escape dismisses the context menu first.
-      if (event.key == Key::Escape && context_menu_.visible) {
-        DismissContextMenu();
-        if (invalidate_) {
-          invalidate_();
-        }
-        return true;
       }
       // Tab reaches the editor through the text-input key hook (runtime gives a
       // focused text input first chance before focus traversal); it handles
@@ -2091,8 +1979,6 @@ public:
     newline_action_ = options.newline_action;
     accept_phantom_on_tab_ = options.accept_phantom_on_tab;
     providers_ = options.decoration_providers;
-    context_menu_items_ = options.context_menu_items;
-    built_in_context_menu_ = options.built_in_context_menu;
   }
 
   // Applies a resolved theme change without resetting retained state.
@@ -2322,21 +2208,13 @@ public:
       events_.Emit<EditorEvents::LongPressed>(
           static_cast<uint32_t>(result.cursor_after.line), static_cast<uint32_t>(result.cursor_after.column)
       );
-      if (built_in_context_menu_) {
-        ShowContextMenu(result.tap_point);
-      } else {
-        events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
-      }
+      events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
       break;
     case se::GestureType::DOUBLE_TAP:
       events_.Emit<EditorEvents::DoubleTapped>(
           static_cast<uint32_t>(result.cursor_after.line), static_cast<uint32_t>(result.cursor_after.column)
       );
-      if (built_in_context_menu_) {
-        ShowContextMenu(result.tap_point);
-      } else {
-        events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
-      }
+      events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
       break;
     default:
       break;
@@ -2630,8 +2508,6 @@ public:
       DrawCompletionPanel(paint, panel);
     }
 
-    // The context menu floats above everything, drawn last.
-    DrawContextMenu(paint);
   }
 
 private:
@@ -3465,8 +3341,6 @@ private:
   // next settled refresh re-applies fold regions (possibly empty to clear).
   bool folds_dirty_{true};
   uint32_t last_gutter_icon_reserve_{0};
-  std::function<std::vector<EditorContextItem>()> context_menu_items_;
-  bool built_in_context_menu_{true};
   std::vector<std::shared_ptr<EditorDecorationProvider>> providers_;
   std::vector<sweeteditor::TextChange> pending_changes_;
   std::string synced_document_text_;
@@ -3515,22 +3389,6 @@ private:
     float last_cursor_height{0.0F};
   };
   CompletionState completion_;
-
-  // Context menu (double-tap / long-press): a small floating panel with
-  // clipboard and selection actions, drawn on the canvas like the completion
-  // panel (no host overlay needed).
-  struct ContextMenuEntry {
-    const char* label;
-    int command;  // 0=cut, 1=copy, 2=paste, 3=select-all, 4=find
-    bool enabled{true};
-  };
-  struct ContextMenuState {
-    bool visible{false};
-    se::PointF anchor{};
-    se::Rect panel_rect{};
-    std::vector<ContextMenuEntry> entries;
-  };
-  ContextMenuState context_menu_;
 
   // Active touch pointers (pointer_id -> position) in press order. The editor
   // aggregates multi-touch into one multi-point SweetEditor GestureEvent so the
@@ -3750,22 +3608,22 @@ struct EditorBehavior {
       // Clipboard / selection actions for application toolbars.
       state->cut = [this] {
         if (!holder_) return false;
-        holder_->RunContextCommand(0);
+        holder_->CutSelectionAction();
         return true;
       };
       state->copy = [this] {
         if (!holder_) return false;
-        holder_->RunContextCommand(1);
+        holder_->CopySelectionAction();
         return true;
       };
       state->paste = [this] {
         if (!holder_) return false;
-        holder_->RunContextCommand(2);
+        holder_->PasteSelectionAction();
         return true;
       };
       state->select_all = [this] {
         if (!holder_) return false;
-        holder_->RunContextCommand(3);
+        holder_->SelectAllAction();
         return true;
       };
     }
