@@ -2692,19 +2692,18 @@ private:
   void DrawSelectionHandle(PaintContext& paint, const se::SelectionHandle& handle) {
     // Solid teardrop handle: a triangle tip touching the line bottom flares
     // into a circular bulb below. No translucent layers — solid fill only.
-    const float radius = 7.5F;
+    const float radius = 10.0F;
     const float cx = handle.position.x;
     const float line_top = handle.position.y;
     const float line_bottom = handle.position.y + handle.height;
     const Color fill = theme_.caret_color;
-    paint.DrawRect(Rect{cx - 1.0F, line_top, 2.0F, std::max(1.0F, line_bottom - line_top)}, fill);
-    // The tip extends above the circle top so the pointed end is visible.
+    paint.DrawRect(Rect{cx - 1.5F, line_top, 3.0F, std::max(1.0F, line_bottom - line_top)}, fill);
     const float tip_y = line_bottom + 0.5F;
-    const float bulb_y = tip_y + 12.0F;
+    const float bulb_y = tip_y + 16.0F;
     Path tip;
     tip.MoveTo(Point{cx, tip_y});
-    tip.LineTo(Point{cx - radius * 0.85F, tip_y + 9.0F});
-    tip.LineTo(Point{cx + radius * 0.85F, tip_y + 9.0F});
+    tip.LineTo(Point{cx - radius * 0.85F, tip_y + 12.0F});
+    tip.LineTo(Point{cx + radius * 0.85F, tip_y + 12.0F});
     tip.Close();
     paint.FillPath(std::move(tip), fill);
     paint.DrawCircle(Point{cx, bulb_y}, radius, fill);
