@@ -2203,17 +2203,55 @@ public:
   }
 
   void FirePointerEvents(const se::EditorActionResult& result) {
+    // Long-press/double-tap menus expect a selection to act on: when the
+    // gesture only placed a caret, select the word under it first.
+    // Word boundaries use ASCII alnum/underscore plus any wide character.
+    const auto is_word_char = [](se::U16Char character) {
+      return character >= 0x80U || character == u'_' ||
+             (character >= u'a' && character <= u'z') || (character >= u'A' && character <= u'Z') ||
+             (character >= u'0' && character <= u'9');
+    };
+    const auto select_word_if_needed = [&] {
+      const se::TextRange selection = core_->getSelection().normalized();
+      if (selection.start != selection.end) {
+        return;
+      }
+      const se::U16String raw = document_->getLineU16Text(result.cursor_after.line);
+      const std::u16string_view line_text(reinterpret_cast<const char16_t*>(raw.data()), raw.size());
+      std::size_t start = static_cast<std::size_t>(result.cursor_after.column);
+      std::size_t end = start;
+      while (start > 0 && is_word_char(static_cast<se::U16Char>(line_text[start - 1]))) {
+        --start;
+      }
+      while (end < line_text.size() && is_word_char(static_cast<se::U16Char>(line_text[end]))) {
+        ++end;
+      }
+      if (end == start) {
+        return;
+      }
+      core_->setSelection(
+          {{result.cursor_after.line, start}, {result.cursor_after.line, end}}
+      );
+      text_input_client_->NotifySelectionChanged();
+      RefreshDecorations(true);
+      model_dirty_ = true;
+      if (invalidate_) {
+        invalidate_();
+      }
+    };
     switch (result.gesture_type) {
     case se::GestureType::LONG_PRESS:
       events_.Emit<EditorEvents::LongPressed>(
           static_cast<uint32_t>(result.cursor_after.line), static_cast<uint32_t>(result.cursor_after.column)
       );
+      select_word_if_needed();
       events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
       break;
     case se::GestureType::DOUBLE_TAP:
       events_.Emit<EditorEvents::DoubleTapped>(
           static_cast<uint32_t>(result.cursor_after.line), static_cast<uint32_t>(result.cursor_after.column)
       );
+      select_word_if_needed();
       events_.Emit<EditorEvents::ContextMenuRequested>(BuildContextMenuInfo(result.tap_point));
       break;
     default:
