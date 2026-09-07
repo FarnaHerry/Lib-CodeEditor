@@ -2686,16 +2686,25 @@ private:
   }
 
   void DrawSelectionHandle(PaintContext& paint, const se::SelectionHandle& handle) {
-    const float radius = 6.0F;
+    // Water-drop handles: a slim stem along the line plus a larger droplet
+    // below it (pointed tip touches the line bottom). The inner core uses the
+    // editor background so the handles read as a ring on any theme.
+    const float radius = 7.5F;
     const float cx = handle.position.x;
-    // getPositionScreenCoord resolves the logical line's line_number_position.y,
-    // which is the line TOP (screen y, scroll already applied) — not the text
-    // baseline. The stem spans the full line height; the teardrop sits below
-    // the line bottom (reference drag-handle anchor).
     const float line_top = handle.position.y;
     const float line_bottom = handle.position.y + handle.height;
-    paint.DrawRect(Rect{cx - 1.0F, line_top, 2.0F, std::max(1.0F, line_bottom - line_top)}, Argb(0xFF1F6FEB));
-    paint.DrawCircle(Point{cx, line_bottom + radius * 0.8F}, radius, Argb(0xFF1F6FEB));
+    const Color fill = theme_.caret_color;
+    paint.DrawRect(Rect{cx - 1.0F, line_top, 2.0F, std::max(1.0F, line_bottom - line_top)}, fill);
+    const float tip_y = line_bottom + 1.0F;
+    const float bulb_y = tip_y + radius * 1.05F;
+    Path droplet;
+    droplet.MoveTo(Point{cx, tip_y});
+    droplet.LineTo(Point{cx - radius * 0.62F, tip_y + radius * 0.55F});
+    droplet.LineTo(Point{cx + radius * 0.62F, tip_y + radius * 0.55F});
+    droplet.Close();
+    paint.FillPath(std::move(droplet), fill);
+    paint.DrawCircle(Point{cx, bulb_y}, radius, fill);
+    paint.DrawCircle(Point{cx, bulb_y}, radius * 0.52F, theme_.background);
   }
 
   void DrawScrollbar(PaintContext& paint, const se::ScrollbarModel& bar) {
