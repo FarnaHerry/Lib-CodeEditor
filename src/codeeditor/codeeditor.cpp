@@ -2689,56 +2689,24 @@ private:
     }
   }
 
-  // Fills a teardrop silhouette: pointed tip at (cx, tip_y) flaring into a
-  // rounded bulb centered at (cx, bulb_y). Tangent lines from the tip meet the
-  // bulb circle at its upper sides, so the shape reads as a real droplet.
-  void FillDroplet(PaintContext& paint, float cx, float tip_y, float bulb_y, float radius,
-                   const Color& color) {
-    const float distance = std::max(radius * 1.05F, bulb_y - tip_y);
-    const float beta = std::asin(std::clamp(radius / distance, 0.0F, 1.0F));
-    const float contact_y = bulb_y - radius * std::cos(beta);
-    Path path;
-    path.MoveTo(Point{cx, tip_y});
-    path.LineTo(Point{cx - radius * std::sin(beta), contact_y});
-    // Sample the lower bulb dome between the two tangent contacts.
-    constexpr int kSamples = 48;
-    float angle = static_cast<float>(-M_PI);
-    bool started = false;
-    for (int step = 0; step <= kSamples; ++step) {
-      const float theta = angle + 2.0F * static_cast<float>(M_PI) * static_cast<float>(step) /
-                                     static_cast<float>(kSamples);
-      const float y = bulb_y + radius * std::sin(theta);
-      if (y < contact_y - 0.25F) {
-        continue;
-      }
-      const float x = cx + radius * std::cos(theta);
-      if (!started) {
-        path.LineTo(Point{x, y});
-        started = true;
-      } else {
-        path.LineTo(Point{x, y});
-      }
-    }
-    path.LineTo(Point{cx + radius * std::sin(beta), contact_y});
-    path.Close();
-    paint.FillPath(std::move(path), color);
-  }
-
   void DrawSelectionHandle(PaintContext& paint, const se::SelectionHandle& handle) {
-    // Teardrop handles with the point up against the line, a soft rim for
-    // definition, and a slim stem along the selection edge.
-    const float radius = 8.0F;
+    // Solid teardrop handle: a triangle tip touching the line bottom flares
+    // into a circular bulb below. No translucent layers — solid fill only.
+    const float radius = 7.5F;
     const float cx = handle.position.x;
     const float line_top = handle.position.y;
     const float line_bottom = handle.position.y + handle.height;
     const Color fill = theme_.caret_color;
     paint.DrawRect(Rect{cx - 1.0F, line_top, 2.0F, std::max(1.0F, line_bottom - line_top)}, fill);
     const float tip_y = line_bottom + 0.5F;
-    const float bulb_y = tip_y + radius * 1.55F;
-    Color rim = fill;
-    rim.alpha = 0.35F;
-    FillDroplet(paint, cx, tip_y - 1.0F, bulb_y + 1.0F, radius + 2.0F, rim);
-    FillDroplet(paint, cx, tip_y, bulb_y, radius, fill);
+    const float bulb_y = tip_y + radius;
+    Path tip;
+    tip.MoveTo(Point{cx, tip_y});
+    tip.LineTo(Point{cx - radius * 0.72F, tip_y + radius * 0.72F});
+    tip.LineTo(Point{cx + radius * 0.72F, tip_y + radius * 0.72F});
+    tip.Close();
+    paint.FillPath(std::move(tip), fill);
+    paint.DrawCircle(Point{cx, bulb_y}, radius, fill);
   }
 
   void DrawScrollbar(PaintContext& paint, const se::ScrollbarModel& bar) {
