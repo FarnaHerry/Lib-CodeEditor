@@ -45,9 +45,14 @@ struct EditorContextMenuInfo {
   // Selected text (or empty) and the full caret line text.
   std::string selected_text;
   std::string caret_line_text;
-  // Local editor-space position where the gesture fired (for placing UI).
+  // Local editor-space position where the gesture fired (tap point).
   float position_x = 0.0F;
   float position_y = 0.0F;
+  // Viewport caret rectangle (top-left + height). Prefer these when placing
+  // UI: selection actions should anchor to the caret, not the finger.
+  float caret_x = 0.0F;
+  float caret_y = 0.0F;
+  float caret_height = 0.0F;
 };
 
 struct EditorEvents {
