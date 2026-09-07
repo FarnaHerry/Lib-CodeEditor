@@ -81,6 +81,10 @@ struct EditorEvents {
 
 // Syntax style ids resolved by the default palette the component registers on
 // the editor core. Custom ids may be registered through the controller.
+// Style ids used by the Markdown heading hierarchy (H1..H6). Registered by
+// the component with graded size scales and the annotation color.
+inline constexpr std::uint32_t kMarkdownHeadingStyleBase = 200;
+
 enum class EditorStyle : std::int32_t {
   Keyword = 1,
   Type = 2,

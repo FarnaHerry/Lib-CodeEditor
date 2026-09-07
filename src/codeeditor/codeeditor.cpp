@@ -316,6 +316,20 @@ void RegisterSyntaxStyles(se::EditorCore& core, const EditorTheme& theme) {
         static_cast<uint32_t>(EditorStyle::RainbowFirst) + index, style(theme.syntax_rainbow[index])
     );
   }
+  // Markdown heading grades: H1 largest, H2 medium, H3 and deeper share one
+  // size that stays above the body text.
+  constexpr float kHeadingScales[6] = {1.45F, 1.28F, 1.16F, 1.16F, 1.16F, 1.16F};
+  for (std::size_t index = 0; index < 6; ++index) {
+    core.registerTextStyle(
+        kMarkdownHeadingStyleBase + static_cast<uint32_t>(index),
+        se::TextStyle{
+            ToArgb(theme.syntax_annotation),
+            0,
+            se::FONT_STYLE_NORMAL,
+            kHeadingScales[index],
+        }
+    );
+  }
 }
 
 
@@ -2766,8 +2780,10 @@ private:
     // Content runs carry the configured content font (family + weight/slant);
     // MakeTextStyle seeds the base, then retarget the family so custom fonts
     // reach the paint path (the measurer path already uses ContentFont()).
-    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_size_);
-    style.font = ContentFont();
+    const float scale = std::clamp(run.style.size_scale, 0.5F, 2.0F);
+    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_size_ * scale);
+    huxerui::Font base_font = ContentFont();
+    style.font = base_font.WithSize(base_font.Size() * scale);
     paint.DrawTextRun(Rect{run.x, top, run.width, height}, Point{run.x, run.y}, text, style);
   }
 
