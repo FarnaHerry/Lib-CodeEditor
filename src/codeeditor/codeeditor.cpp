@@ -316,17 +316,16 @@ void RegisterSyntaxStyles(se::EditorCore& core, const EditorTheme& theme) {
         static_cast<uint32_t>(EditorStyle::RainbowFirst) + index, style(theme.syntax_rainbow[index])
     );
   }
-  // Markdown heading grades: H1 largest, H2 medium, H3 and deeper share one
-  // size that stays above the body text.
-  constexpr float kHeadingScales[6] = {1.45F, 1.28F, 1.16F, 1.16F, 1.16F, 1.16F};
+  // Markdown heading grades are visually bold (uniform size for now); graded
+  // font sizes are deferred until per-line measurement/line-height support.
   for (std::size_t index = 0; index < 6; ++index) {
     core.registerTextStyle(
         kMarkdownHeadingStyleBase + static_cast<uint32_t>(index),
         se::TextStyle{
             ToArgb(theme.syntax_annotation),
             0,
-            se::FONT_STYLE_NORMAL,
-            kHeadingScales[index],
+            se::FONT_STYLE_BOLD,
+            1.0f,
         }
     );
   }
@@ -2780,10 +2779,11 @@ private:
     // Content runs carry the configured content font (family + weight/slant);
     // MakeTextStyle seeds the base, then retarget the family so custom fonts
     // reach the paint path (the measurer path already uses ContentFont()).
-    const float scale = std::clamp(run.style.size_scale, 0.5F, 2.0F);
-    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_size_ * scale);
-    huxerui::Font base_font = ContentFont();
-    style.font = base_font.WithSize(base_font.Size() * scale);
+    // Text measurement/layout still uses one uniform font, so styles must
+    // not resize the painted font (the caret geometry would drift). Heading
+    // hierarchy stays visual (bold + color) until per-line measurement lands.
+    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_size_);
+    style.font = ContentFont();
     paint.DrawTextRun(Rect{run.x, top, run.width, height}, Point{run.x, run.y}, text, style);
   }
 
