@@ -2698,12 +2698,13 @@ private:
     const float line_bottom = handle.position.y + handle.height;
     const Color fill = theme_.caret_color;
     paint.DrawRect(Rect{cx - 1.0F, line_top, 2.0F, std::max(1.0F, line_bottom - line_top)}, fill);
+    // The tip extends above the circle top so the pointed end is visible.
     const float tip_y = line_bottom + 0.5F;
-    const float bulb_y = tip_y + radius;
+    const float bulb_y = tip_y + 12.0F;
     Path tip;
     tip.MoveTo(Point{cx, tip_y});
-    tip.LineTo(Point{cx - radius * 0.72F, tip_y + radius * 0.72F});
-    tip.LineTo(Point{cx + radius * 0.72F, tip_y + radius * 0.72F});
+    tip.LineTo(Point{cx - radius * 0.85F, tip_y + 9.0F});
+    tip.LineTo(Point{cx + radius * 0.85F, tip_y + 9.0F});
     tip.Close();
     paint.FillPath(std::move(tip), fill);
     paint.DrawCircle(Point{cx, bulb_y}, radius, fill);
