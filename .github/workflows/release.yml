@@ -167,6 +167,14 @@ jobs:
           else
             echo "CXXFLAGS=-std=c++20" >> "${GITHUB_ENV}"
           fi
+          # The HuxerUI branch's fontconfig font resolution calls
+          # pango_fc_font_map_config_changed directly, but its static library
+          # interface does not link PangoFT2, so any executable linking
+          # huxerui_static fails with "DSO missing from command line". Add the
+          # library through LDFLAGS until the interface links it itself.
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            echo "LDFLAGS=-lpangoft2-1.0" >> "${GITHUB_ENV}"
+          fi
           echo "HuxerUI library source at ${GITHUB_WORKSPACE}/huxerui (huxerui CLI from the released SDK)"
 
       - name: Install Linux build dependencies (desktop)
