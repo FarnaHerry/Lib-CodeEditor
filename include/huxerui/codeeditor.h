@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -9,8 +10,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <array>
 
 #include <sweeteditor/decoration.h>
 #include <sweeteditor/editor_core.h>
@@ -33,15 +32,15 @@ namespace huxerui::codeeditor {
 // UI from this data.
 struct EditorContextMenuInfo {
   // Caret position (0-based).
-  uint32_t cursor_line = 0;
-  uint32_t cursor_column = 0;
+  std::uint32_t cursor_line = 0;
+  std::uint32_t cursor_column = 0;
   // Whether a non-empty selection exists.
   bool has_selection = false;
   // Selection range (0-based), valid when has_selection.
-  uint32_t selection_start_line = 0;
-  uint32_t selection_start_column = 0;
-  uint32_t selection_end_line = 0;
-  uint32_t selection_end_column = 0;
+  std::uint32_t selection_start_line = 0;
+  std::uint32_t selection_start_column = 0;
+  std::uint32_t selection_end_line = 0;
+  std::uint32_t selection_end_column = 0;
   // Selected text (or empty) and the full caret line text.
   std::string selected_text;
   std::string caret_line_text;
@@ -83,7 +82,7 @@ struct EditorEvents {
 // the editor core. Custom ids may be registered through the controller.
 // Style ids used by the Markdown heading hierarchy (H1..H6). Registered by
 // the component with graded size scales and the annotation color.
-inline constexpr std::uint32_t kMarkdownHeadingStyleBase = 200;
+inline constexpr std::uint32_t markdown_heading_style_base = 200;
 
 enum class EditorStyle : std::int32_t {
   Keyword = 1,
@@ -211,8 +210,8 @@ struct CompletionItem {
   // Optional replacement range (columns within the cursor line). Without it,
   // text is inserted at the caret.
   bool has_text_edit{false};
-  uint32_t text_edit_start{0};
-  uint32_t text_edit_end{0};
+  std::uint32_t text_edit_start{0};
+  std::uint32_t text_edit_end{0};
   std::string text_edit_text;
 };
 
@@ -228,12 +227,12 @@ struct CompletionContext {
 
   TriggerKind trigger_kind{TriggerKind::Invoked};
   std::string trigger_character;
-  uint32_t cursor_line{0};
-  uint32_t cursor_column{0};
+  std::uint32_t cursor_line{0};
+  std::uint32_t cursor_column{0};
   std::string line_text;
   // Word (identifier) range around the caret, if any.
-  uint32_t word_start{0};
-  uint32_t word_end{0};
+  std::uint32_t word_start{0};
+  std::uint32_t word_end{0};
 };
 
 using CompletionProvider = std::function<std::vector<CompletionItem>(const CompletionContext&)>;
@@ -241,7 +240,7 @@ using CompletionProvider = std::function<std::vector<CompletionItem>(const Compl
 // ---- Controller ----
 
 namespace detail {
-class EditorControllerState;
+struct EditorControllerState;
 struct EditorControllerAccess;
 }  // namespace detail
 
@@ -405,7 +404,7 @@ struct EditorOptions {
   std::optional<EditorTheme> theme;
 
   bool read_only = false;
-  uint32_t tab_size = 4;
+  std::uint32_t tab_size = 4;
   bool backspace_unindent = true;
   bool insert_spaces = true;
   std::vector<std::pair<char32_t, char32_t>> auto_closing_pairs;
@@ -439,7 +438,7 @@ struct EditorOptions {
 
   // Newline action hook: invoked before inserting a newline; may return
   // replacement text.
-  std::function<std::string(uint32_t line, uint32_t column)> newline_action;
+  std::function<std::string(std::uint32_t line, std::uint32_t column)> newline_action;
 
   // When set, the core computes a line-level diff against this original text.
   // Empty disables the diff.

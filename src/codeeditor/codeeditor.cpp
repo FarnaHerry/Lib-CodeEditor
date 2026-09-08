@@ -320,7 +320,7 @@ void RegisterSyntaxStyles(se::EditorCore& core, const EditorTheme& theme) {
   // font sizes are deferred until per-line measurement/line-height support.
   for (std::size_t index = 0; index < 6; ++index) {
     core.registerTextStyle(
-        kMarkdownHeadingStyleBase + static_cast<uint32_t>(index),
+        markdown_heading_style_base + static_cast<uint32_t>(index),
         se::TextStyle{
             ToArgb(theme.syntax_annotation),
             0,
@@ -579,7 +579,6 @@ constexpr float kCompletionPanelPaddingV = 6.0F;
 constexpr float kCompletionRowPaddingH = 8.0F;
 constexpr float kCompletionBadgeSize = 18.0F;
 constexpr float kCompletionBadgeGap = 8.0F;
-constexpr float kCompletionDetailGap = 8.0F;
 constexpr float kCompletionGap = 4.0F;
 constexpr float kCompletionFramePadding = 8.0F;
 constexpr size_t kCompletionMaxVisible = 4;
@@ -706,8 +705,8 @@ public:
       bool read_only,
       EditorTheme theme
   )
-      : core_(std::move(core)),
-        theme_(std::move(theme)),
+      : theme_(std::move(theme)),
+        core_(std::move(core)),
         document_(std::move(document)),
         on_content_changed_(std::move(on_content_changed)),
         on_change_(std::move(on_change)),
@@ -1227,14 +1226,14 @@ public:
       huxerui::EventEmitter events,
       EditorController controller
   )
-      : font_size_(options.font_size),
+      : theme_(options.theme.value_or(EditorTheme::Default())),
+        font_family_(options.font_family),
         invalidate_(std::move(invalidate)),
-        events_(std::move(events)),
-        controller_(std::move(controller)),
+        font_size_(options.font_size),
         completion_provider_(options.completion_provider),
         completion_trigger_characters_(options.completion_trigger_characters),
-        font_family_(options.font_family),
-        theme_(options.theme.value_or(EditorTheme::Default())) {
+        controller_(std::move(controller)),
+        events_(std::move(events)) {
     const Font content_font = ContentFont();
     font_metrics_ = measurer.Metrics(content_font);
     char_width_ = measurer.MeasureRun("0", TextStyle{content_font, Color::Black(), TextDecoration::None})
@@ -3658,6 +3657,7 @@ struct EditorBehavior {
           options_(behavior.options),
           events_(behavior.events),
           controller_(behavior.controller),
+          search_visible_(behavior.search_visible),
           holder_(std::make_shared<EditorHolder>(
               *behavior.measurer,
               behavior.options,
@@ -3665,7 +3665,6 @@ struct EditorBehavior {
               behavior.events,
               behavior.controller
           )),
-          search_visible_(behavior.search_visible),
           document_key_(behavior.options.document_key) {
       BindController(behavior.controller);
       static_cast<void>(node);
@@ -3849,10 +3848,10 @@ struct EditorBehavior {
       // Bounded so a permanently empty viewport cannot spin frames forever.
       if (holder_->ShouldBootstrapHighlight()) {
         InvalidatePaint();
-        return {.needs_frame = true};
+        return {.needs_frame = true, .wake_after = std::nullopt};
       }
       if (holder_->HasActiveAnimation() || holder_->HasPendingPaintWork()) {
-        return {.needs_frame = true};
+        return {.needs_frame = true, .wake_after = std::nullopt};
       }
       if (holder_->IsFocused()) {
         return {.wake_after = 0.5};

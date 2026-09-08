@@ -19,3 +19,8 @@ Thumbs.db
 
 # Generated project graph
 /examples/preview/.huxerui/
+
+# Android Gradle build outputs
+/examples/preview/platform/android/.gradle/
+/examples/preview/platform/android/local.properties
+/examples/preview/platform/android/**/build/

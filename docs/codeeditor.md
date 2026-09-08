@@ -5,7 +5,7 @@ Header: `<huxerui/codeeditor.h>` · Namespace: `huxerui::codeeditor` · CMake: `
 ## 1. Component entry
 
 ```cpp
-huxerui::View CodeEditor(CodeEditorOptions options = {}, CodeEditorController controller = {});
+huxerui::View CodeEditor(EditorOptions options = {}, EditorController controller = {});
 ```
 
 Returns a declarative `View` carrying a retained editor extension. Place it anywhere a `View` fits:
@@ -13,8 +13,8 @@ Returns a declarative `View` carrying a retained editor extension. Place it anyw
 ```cpp
 [[huxerui::composable]]
 View EditorPage() {
-  const auto controller = huxerui::codeeditor::UseCodeEditorController();
-  huxerui::codeeditor::CodeEditorOptions options;
+  const auto controller = huxerui::codeeditor::UseEditorController();
+  huxerui::codeeditor::EditorOptions options;
   options.initial_text = "int main() { return 0; }";
   return huxerui::codeeditor::CodeEditor(std::move(options), controller).With(Grow{});
 }
@@ -38,7 +38,7 @@ UseState(value)          — declare reactive state in a composable
                             providers, hooks, diff, document key)
 ```
 
-**You never imperatively call setters on the editor.** You mutate `UseState`, HuxerUI recomposes your composable, and the editor's retained extension reconciles the new `CodeEditorOptions` against its previous value — applying only the delta without resetting retained state.
+**You never imperatively call setters on the editor.** You mutate `UseState`, HuxerUI recomposes your composable, and the editor's retained extension reconciles the new `EditorOptions` against its previous value — applying only the delta without resetting retained state.
 
 ### UseState-driven editor
 
@@ -52,17 +52,17 @@ View EditorPage() {
   auto dirty_count = UseState(0);
   auto cursor_label = UseState(std::string("Ln 1, Col 1"));
 
-  const auto controller = UseCodeEditorController();
+  const auto controller = UseEditorController();
   const Document& doc = documents[current_doc.Get()];
 
   // Build options from state — this is the single source of truth
-  CodeEditorOptions options;
+  EditorOptions options;
   options.document_key = doc.path;
   options.initial_text = doc.content;
   options.font_size = font_size.Get();
 
   if (dark_mode.Get()) {
-    auto theme = CodeEditorTheme::Default();
+    auto theme = EditorTheme::Default();
     theme.background = Color::Rgb(30, 30, 46);
     theme.text_foreground = Color::Rgb(205, 214, 244);
     options.theme = theme;
@@ -82,13 +82,13 @@ View EditorPage() {
 
     // The editor — declarative, reconciles on every recomposition
     CodeEditor(std::move(options), controller)
-        .On<CodeEditorEvents::CursorChanged>(
+        .On<EditorEvents::CursorChanged>(
             [cursor_label](uint32_t line, uint32_t col) {
               // Event handlers capture UseState by value — writes invalidate
               // this scope, updating the status bar
               cursor_label = "Ln " + std::to_string(line + 1) + ", Col " + std::to_string(col + 1);
             })
-        .On<CodeEditorEvents::TextChanged>([dirty_count] {
+        .On<EditorEvents::TextChanged>([dirty_count] {
           dirty_count = dirty_count.Get() + 1;
         })
         .With(Grow{}),
@@ -112,10 +112,10 @@ View EditorPage() {
 
 ### The controller is also UseState
 
-`UseCodeEditorController()` creates a `State<CodeEditorController>` — the controller is scope state, not a singleton. It persists across recompositions of the same scope and reconnects when the editor mounts/unmounts:
+`UseEditorController()` creates a `State<EditorController>` — the controller is scope state, not a singleton. It persists across recompositions of the same scope and reconnects when the editor mounts/unmounts:
 
 ```cpp
-const auto controller = UseCodeEditorController();  // State<Controller>
+const auto controller = UseEditorController();  // State<Controller>
 
 Button("Format").OnClick([controller] {
   // Controller methods return false while the editor is not mounted
@@ -134,7 +134,7 @@ Event handlers are lambdas that capture `UseState` by value. A write inside a ha
 auto text_length = UseState(std::size_t(0));
 
 CodeEditor(options)
-    .On<CodeEditorEvents::TextChanged>([controller, text_length] {
+    .On<EditorEvents::TextChanged>([controller, text_length] {
       // Reads the authoritative text and publishes it as state
       text_length = controller.Text().size();
     });
@@ -142,13 +142,13 @@ CodeEditor(options)
 
 ---
 
-## 3. CodeEditorOptions
+## 3. EditorOptions
 
 ### Document
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `initial_text` | `std::string` | `""` | Initial UTF-8 document content. Loaded when the editor mounts or when `document_key` changes. **Not** a controlled value — after mount the retained core owns the text; use `CodeEditorEvents::TextChanged` to observe and `Controller::Text()` / `LoadDocument()` to read or replace it. |
+| `initial_text` | `std::string` | `""` | Initial UTF-8 document content. Loaded when the editor mounts or when `document_key` changes. **Not** a controlled value — after mount the retained core owns the text; use `EditorEvents::TextChanged` to observe and `Controller::Text()` / `LoadDocument()` to read or replace it. |
 | `document_key` | `std::string` | `""` | Stable document identity. Changing it between recompositions reloads `initial_text` and recreates the editor state (undo history, cursor, folds reset). Empty keeps one default document. Distinct keys enable multi-document switching. |
 
 ### Typography
@@ -159,7 +159,7 @@ CodeEditor(options)
 | `font_size` | `float` | `14.0` | Content font size in logical pixels. |
 | `line_spacing_add` | `float` | `0.0` | Extra spacing added to each line height. |
 | `line_spacing_mult` | `float` | `1.2` | Line height multiplier. |
-| `theme` | `std::optional<CodeEditorTheme>` | `{}` | Explicit visual override. When empty the editor derives from the ambient `UseTheme()` and follows `MaterialTheme` light/dark live. See §3. |
+| `theme` | `std::optional<EditorTheme>` | `{}` | Explicit visual override. When empty the editor derives from the ambient `UseTheme()` and follows `MaterialTheme` light/dark live. See §3. |
 
 ### Editing behavior
 
@@ -182,7 +182,7 @@ CodeEditor(options)
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `decoration_providers` | `std::vector<std::shared_ptr<CodeEditorDecorationProvider>>` | `{}` | Decoration sources; the editor merges all results. See §5. |
+| `decoration_providers` | `std::vector<std::shared_ptr<EditorDecorationProvider>>` | `{}` | Decoration sources; the editor merges all results. See §5. |
 | `accept_phantom_on_tab` | `bool` | `true` | Whether Tab commits the caret-line phantom text. |
 
 ### Hooks and diff
@@ -206,7 +206,7 @@ CodeEditor(options)
 
 ---
 
-## 4. CodeEditorTheme
+## 4. EditorTheme
 
 All colors are `huxerui::Color`. Factories: `Default()` (light reference), `FromThemeSpec(const ThemeSpec&)` (ambient derivation). Has `operator==`.
 
@@ -240,7 +240,7 @@ All colors are `huxerui::Color`. Factories: `Default()` (light reference), `From
 ### Usage
 
 ```cpp
-auto theme = huxerui::codeeditor::CodeEditorTheme::Default();
+auto theme = huxerui::codeeditor::EditorTheme::Default();
 theme.background = Color::Rgb(30, 30, 46);
 theme.text_foreground = Color::Rgb(205, 214, 244);
 theme.syntax_keyword = Color::Rgb(203, 166, 247);
@@ -249,7 +249,7 @@ options.theme = theme;
 
 ---
 
-## 5. CodeEditorEvents
+## 5. EditorEvents
 
 All events bind with `.On<Event>(handler)` on the `View` returned by `CodeEditor()`. Line and column parameters are **0-based**; display `line + 1` to users.
 
@@ -263,34 +263,34 @@ All events bind with `.On<Event>(handler)` on the `View` returned by `CodeEditor
 | `LongPressed` | `void(uint32_t line, uint32_t column)` | 0-based position of the long-press. |
 | `DoubleTapped` | `void(uint32_t line, uint32_t column)` | 0-based position of the double-tap. |
 | `LinkClicked` | `void(const std::string& url)` | URL string of the clicked link token. |
-| `CodeLensClicked` | `void(int32_t command_id)` | Command id assigned by the provider's `CodeEditorCodeLens.command_id`. |
+| `CodeLensClicked` | `void(int32_t command_id)` | Command id assigned by the provider's `CodeLensItem.command_id`. |
 | `GutterIconClicked` | `void(uint32_t line, int32_t icon_id)` | `line` — 0-based line. `icon_id` — provider-assigned id. `1` = diamond, `2` = circle, others = dot. |
 | `InlayClicked` | `void(uint32_t line, uint32_t column)` | 0-based position of the clicked inlay hint. |
 
 ```cpp
 CodeEditor(options, controller)
-    .On<CodeEditorEvents::CursorChanged>([status](uint32_t line, uint32_t col) {
+    .On<EditorEvents::CursorChanged>([status](uint32_t line, uint32_t col) {
       status = "Ln " + std::to_string(line + 1) + ", Col " + std::to_string(col + 1);
     })
-    .On<CodeEditorEvents::GutterIconClicked>([this](uint32_t line, int32_t id) {
+    .On<EditorEvents::GutterIconClicked>([this](uint32_t line, int32_t id) {
       if (id == 2) ToggleBreakpoint(line);
     });
 ```
 
 ---
 
-## 6. CodeEditorDecorationProvider
+## 6. EditorDecorationProvider
 
 ```cpp
-class CodeEditorDecorationProvider {
+class EditorDecorationProvider {
  public:
-  virtual ~CodeEditorDecorationProvider() = default;
-  virtual CodeEditorDecorationResult ProvideDecorations(
-      const CodeEditorDecorationContext& context) = 0;
+  virtual ~EditorDecorationProvider() = default;
+  virtual EditorDecorationResult ProvideDecorations(
+      const EditorDecorationContext& context) = 0;
 };
 ```
 
-### CodeEditorDecorationContext
+### EditorDecorationContext
 
 | Field | Type | Description |
 |---|---|---|
@@ -301,9 +301,9 @@ class CodeEditorDecorationProvider {
 | `cursor_column` | `uint32_t` | Caret column (0-based). |
 | `viewport_settled` | `bool` | `false` during fast scrolling — skip heavy computation. |
 | `document_text` | `const std::string*` | Full UTF-8 text. May be `nullptr`. Valid only during the call. |
-| `text_changes` | `std::vector<CodeEditorTextChange>` | Incremental edits since last refresh. |
+| `text_changes` | `std::vector<TextChange>` | Incremental edits since last refresh. |
 
-### CodeEditorTextChange
+### TextChange
 
 | Field | Description |
 |---|---|
@@ -311,7 +311,7 @@ class CodeEditorDecorationProvider {
 | `end_line`, `end_column` | Change range end. |
 | `new_text` | Replacement text (UTF-8). Empty for deletes. |
 
-### CodeEditorDecorationResult
+### EditorDecorationResult
 
 | Field | Type | Description |
 |---|---|---|
@@ -330,7 +330,7 @@ class CodeEditorDecorationProvider {
 
 ### Item types
 
-**StyleSpan** — `{column, length, style}`. `style` is a `CodeEditorStyle` enum value resolving through the theme's syntax palette.
+**StyleSpan** — `{column, length, style}`. `style` is a `EditorStyle` enum value resolving through the theme's syntax palette.
 
 **InlayHint** — `{column, text}`.
 
@@ -366,10 +366,10 @@ class CodeEditorDecorationProvider {
 
 ---
 
-## 7. CodeEditorController
+## 7. EditorController
 
 ```cpp
-inline CodeEditorController UseCodeEditorController();
+inline EditorController UseEditorController();
 ```
 
 Methods operate on the mounted editor and return `false` when disconnected.
@@ -426,7 +426,7 @@ Methods operate on the mounted editor and return `false` when disconnected.
 ## 9. Architecture
 
 ```text
-CodeEditor() -> Canvas -> CodeEditorBehavior -> Extension(NodeExtension) -> EditorHolder -> SweetEditor EditorCore
+CodeEditor() -> Canvas -> EditorBehavior -> Extension(NodeExtension) -> EditorHolder -> SweetEditor EditorCore
 ```
 
 ## 10. Limitations
@@ -446,7 +446,7 @@ Mount, recomposition, document switching, unmount, editing, clipboard, undo/redo
 ### Minimal editor
 
 ```cpp
-huxerui::codeeditor::CodeEditorOptions options;
+huxerui::codeeditor::EditorOptions options;
 options.initial_text = "// type here\n";
 return huxerui::codeeditor::CodeEditor(std::move(options)).With(Grow{});
 ```
@@ -455,20 +455,20 @@ That's it — no key, no provider, no controller. The editor works out of the bo
 
 ### Syntax highlighting
 
-Implement `CodeEditorDecorationProvider` and return `syntax_spans` for the visible range:
+Implement `EditorDecorationProvider` and return `syntax_spans` for the visible range:
 
 ```cpp
-class MyHighlighter final : public huxerui::codeeditor::CodeEditorDecorationProvider {
+class MyHighlighter final : public huxerui::codeeditor::EditorDecorationProvider {
  public:
-  huxerui::codeeditor::CodeEditorDecorationResult ProvideDecorations(
-      const huxerui::codeeditor::CodeEditorDecorationContext& context) override {
-    huxerui::codeeditor::CodeEditorDecorationResult result;
+  huxerui::codeeditor::EditorDecorationResult ProvideDecorations(
+      const huxerui::codeeditor::EditorDecorationContext& context) override {
+    huxerui::codeeditor::EditorDecorationResult result;
     for (uint32_t line = context.visible_start_line; line <= context.visible_end_line; ++line) {
       const std::string text = GetLineText(line);  // your document model
       // tokenize `text` and emit spans...
       result.syntax_spans.emplace_back(line, std::vector{
-          {0, 3, huxerui::codeeditor::CodeEditorStyle::Keyword},   // "int" cols 0..3
-          {8, 4, huxerui::codeeditor::CodeEditorStyle::Function},  // "main" cols 8..12
+          {0, 3, huxerui::codeeditor::EditorStyle::Keyword},   // "int" cols 0..3
+          {8, 4, huxerui::codeeditor::EditorStyle::Function},  // "main" cols 8..12
       });
     }
     return result;
@@ -490,7 +490,7 @@ View FileTabs() {
   auto current_file = UseState(0);
   const Document& doc = documents[current_file.Get()];
 
-  huxerui::codeeditor::CodeEditorOptions options;
+  huxerui::codeeditor::EditorOptions options;
   options.document_key = doc.path;       // changing this switches the document
   options.initial_text = doc.content;
 
@@ -507,16 +507,16 @@ View FileTabs() {
 options.read_only = true;
 options.decoration_providers.push_back(std::make_shared<LinterProvider>(diagnostics));
 
-class LinterProvider final : public huxerui::codeeditor::CodeEditorDecorationProvider {
+class LinterProvider final : public huxerui::codeeditor::EditorDecorationProvider {
  public:
   // diagnostics_ is a snapshot from your language server
   explicit LinterProvider(std::vector<Lint> diagnostics) : diagnostics_(std::move(diagnostics)) {}
 
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& context) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& context) override {
+    EditorDecorationResult result;
     for (const Lint& lint : diagnostics_) {
       if (lint.line < context.visible_start_line || lint.line > context.visible_end_line) continue;
-      result.diagnostics.emplace_back(lint.line, std::vector<CodeEditorDiagnostic>{
+      result.diagnostics.emplace_back(lint.line, std::vector<Diagnostic>{
           {lint.column, lint.length, lint.severity, lint.message},
       });
     }
@@ -549,7 +549,7 @@ Snippet syntax: `${N:text}` = tab stop with placeholder, `$0` = final cursor pos
 ```cpp
 [[huxerui::composable]]
 View SearchDemo() {
-  const auto controller = UseCodeEditorController();
+  const auto controller = UseEditorController();
   auto query = UseState(std::string());
 
   return Column {
@@ -568,7 +568,7 @@ Ctrl+F toggles the built-in bar (contains Find / Prev / Next / Replace / All / C
 ### Dark mode
 
 ```cpp
-auto theme = CodeEditorTheme::Default();
+auto theme = EditorTheme::Default();
 theme.background = Color::Rgb(30, 30, 46);
 theme.gutter_background = Color::Rgb(24, 24, 37);
 theme.current_line_background = Color::Rgb(255, 255, 255, 0.06F);
@@ -599,11 +599,11 @@ auto cursor_status = UseState(std::string("Ln 1, Col 1"));
 auto dirty = UseState(false);
 
 CodeEditor(options)
-    .On<CodeEditorEvents::CursorChanged>([cursor_status](uint32_t line, uint32_t col) {
+    .On<EditorEvents::CursorChanged>([cursor_status](uint32_t line, uint32_t col) {
       cursor_status = "Ln " + std::to_string(line + 1) + ", Col " + std::to_string(col + 1);
     })
-    .On<CodeEditorEvents::TextChanged>([dirty] { dirty = true; })
-    .On<CodeEditorEvents::SelectionChanged>(
+    .On<EditorEvents::TextChanged>([dirty] { dirty = true; })
+    .On<EditorEvents::SelectionChanged>(
         [](uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec) {
           // sl..ec is the selection range (0-based, normalized)
         }
@@ -613,13 +613,13 @@ CodeEditor(options)
 ### Gutter icons (breakpoints)
 
 ```cpp
-class BreakpointProvider final : public CodeEditorDecorationProvider {
+class BreakpointProvider final : public EditorDecorationProvider {
  public:
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& context) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& context) override {
+    EditorDecorationResult result;
     for (uint32_t line : breakpoints_) {
       if (line >= context.visible_start_line && line <= context.visible_end_line) {
-        result.gutter_icons.emplace_back(line, std::vector<CodeEditorGutterIcon>{{2}});  // 2 = circle
+        result.gutter_icons.emplace_back(line, std::vector<GutterIcon>{{2}});  // 2 = circle
       }
     }
     return result;
@@ -630,7 +630,7 @@ class BreakpointProvider final : public CodeEditorDecorationProvider {
 };
 
 // handle clicks:
-editor.On<CodeEditorEvents::GutterIconClicked>([provider](uint32_t line, int32_t id) {
+editor.On<EditorEvents::GutterIconClicked>([provider](uint32_t line, int32_t id) {
   if (id == 2) provider->Toggle(line);
 });
 ```
@@ -647,14 +647,14 @@ Added/removed lines get background colors from `theme.diff_added/removed_backgro
 ### Inline AI suggestion (phantom text)
 
 ```cpp
-class CopilotProvider final : public CodeEditorDecorationProvider {
+class CopilotProvider final : public EditorDecorationProvider {
  public:
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& context) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& context) override {
+    EditorDecorationResult result;
     if (context.cursor_line < 100) {
       result.phantom_texts.emplace_back(
           context.cursor_line,
-          std::vector<CodeEditorPhantomText>{{GetLineColumns(context.cursor_line), " // suggested completion"}}
+          std::vector<PhantomText>{{GetLineColumns(context.cursor_line), " // suggested completion"}}
       );
     }
     return result;

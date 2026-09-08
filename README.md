@@ -15,16 +15,16 @@ completion, search, decorations, and events are exposed the HuxerUI-native way.
 - Editing: caret/selection, undo/redo, auto-indent, auto-closing brackets, Tab/space policy, read-only, pinch zoom
 - Custom fonts: `font_family` loads platform-bundled fonts (Android assets) with live switching
 - Completion: provider-driven panel, snippet expansion, replacement ranges
-- Search and replace: built-in declarative search bar or programmatic `CodeEditorController`
-- Full theming: `CodeEditorTheme` covers every visual surface including the syntax token palette
+- Search and replace: built-in declarative search bar or programmatic `EditorController`
+- Full theming: `EditorTheme` covers every visual surface including the syntax token palette
   and rainbow brackets; defaults derive from the ambient HuxerUI theme (light/dark follows
   `MaterialTheme` automatically), and changes apply live without editor state loss
 - Decorations: syntax spans, diagnostics, inlay hints, code lens, links, gutter icons, indent guides,
   fold regions, document highlights, bracket matching, phantom text, diff — all through **one
   unified provider interface**
 - No built-in highlighting engine: wire SweetLine, a language server, or your own analyzer through
-  `CodeEditorDecorationProvider` (the demo shows the optional SweetLine integration)
-- Typed events aggregated in `CodeEditorEvents`
+  `EditorDecorationProvider` (the demo shows the optional SweetLine integration)
+- Typed events aggregated in `EditorEvents`
 
 ## Quick start
 
@@ -35,7 +35,7 @@ completion, search, decorations, and events are exposed the HuxerUI-native way.
 using namespace huxerui;
 
 View App() {
-  huxerui::codeeditor::CodeEditorOptions options;
+  huxerui::codeeditor::EditorOptions options;
   options.initial_text = "int main() {\n  return 0;\n}\n";
 
   return huxerui::codeeditor::CodeEditor(std::move(options)).With(Grow{});
@@ -69,18 +69,18 @@ The library links the vendored SweetEditor core itself. Building requires the Hu
 ## Highlighting: implement a decoration provider
 
 The editor never depends on a highlighting engine. Implement
-`CodeEditorDecorationProvider` and return whatever you can compute for the visible range —
+`EditorDecorationProvider` and return whatever you can compute for the visible range —
 syntax spans, diagnostics, inlay hints, code lens, links, gutter icons, indent guides, fold
 regions, document highlights, bracket matches, and phantom text:
 
 ```cpp
-class MyHighlighting final : public huxerui::codeeditor::CodeEditorDecorationProvider {
+class MyHighlighting final : public huxerui::codeeditor::EditorDecorationProvider {
  public:
-  huxerui::codeeditor::CodeEditorDecorationResult ProvideDecorations(
-      const huxerui::codeeditor::CodeEditorDecorationContext& context) override {
-    huxerui::codeeditor::CodeEditorDecorationResult result;
+  huxerui::codeeditor::EditorDecorationResult ProvideDecorations(
+      const huxerui::codeeditor::EditorDecorationContext& context) override {
+    huxerui::codeeditor::EditorDecorationResult result;
     result.syntax_spans.emplace_back(
-        0, std::vector{{huxerui::codeeditor::CodeEditorStyleSpan{0, 3, huxerui::codeeditor::CodeEditorStyle::Keyword}}}
+        0, std::vector{{huxerui::codeeditor::StyleSpan{0, 3, huxerui::codeeditor::EditorStyle::Keyword}}}
     );
     return result;
   }
@@ -89,7 +89,7 @@ class MyHighlighting final : public huxerui::codeeditor::CodeEditorDecorationPro
 options.decoration_providers.push_back(std::make_shared<MyHighlighting>());
 ```
 
-Style ids come from the `CodeEditorStyle` palette the editor registers by default. For a full
+Style ids come from the `EditorStyle` palette the editor registers by default. For a full
 reference — incremental analysis, overscan, folds, rainbow brackets — see the optional SweetLine
 integration in [`examples/preview/src/sweetline_provider.cpp`](examples/preview/src/sweetline_provider.cpp).
 
@@ -97,12 +97,12 @@ integration in [`examples/preview/src/sweetline_provider.cpp`](examples/preview/
 
 ```cpp
 huxerui::codeeditor::CodeEditor(options, controller)
-    .On<huxerui::codeeditor::CodeEditorEvents::TextChanged>([] { /* document changed */ })
-    .On<huxerui::codeeditor::CodeEditorEvents::CursorChanged>([](uint32_t line, uint32_t column) {})
-    .On<huxerui::codeeditor::CodeEditorEvents::LinkClicked>([](const std::string& url) {});
+    .On<huxerui::codeeditor::EditorEvents::TextChanged>([] { /* document changed */ })
+    .On<huxerui::codeeditor::EditorEvents::CursorChanged>([](uint32_t line, uint32_t column) {})
+    .On<huxerui::codeeditor::EditorEvents::LinkClicked>([](const std::string& url) {});
 ```
 
-`UseCodeEditorController()` creates scope state for programmatic control — `LoadDocument`,
+`UseEditorController()` creates scope state for programmatic control — `LoadDocument`,
 `Text`, `SetCursor`, search/replace, and `ToggleSearch`. All methods return `false` while no
 editor is mounted.
 
@@ -114,7 +114,7 @@ Lib-CodeEditor/
 ├── include/huxerui/codeeditor.h   # public API
 ├── src/codeeditor/                # component implementation
 ├── examples/preview/              # demo app; wires optional SweetLine highlighting
-│   ├── src/sweetline_provider.*   # reference CodeEditorDecorationProvider
+│   ├── src/sweetline_provider.*   # reference EditorDecorationProvider
 │   ├── platform/android/...assets/fonts/  # Maple Mono (+ no-ligature build)
 │   └── platform/                  # per-platform shells
 └── 3dparty/SweetEditor/           # editor core (vendored gitlink)

@@ -5,7 +5,7 @@
 ## 1. 组件入口
 
 ```cpp
-huxerui::View CodeEditor(CodeEditorOptions options = {}, CodeEditorController controller = {});
+huxerui::View CodeEditor(EditorOptions options = {}, EditorController controller = {});
 ```
 
 返回一个携带 retained 编辑器扩展的声明式 `View`。可以放在任何 `View` 适用的位置：
@@ -13,8 +13,8 @@ huxerui::View CodeEditor(CodeEditorOptions options = {}, CodeEditorController co
 ```cpp
 [[huxerui::composable]]
 View EditorPage() {
-  const auto controller = huxerui::codeeditor::UseCodeEditorController();
-  huxerui::codeeditor::CodeEditorOptions options;
+  const auto controller = huxerui::codeeditor::UseEditorController();
+  huxerui::codeeditor::EditorOptions options;
   options.initial_text = "int main() { return 0; }";
   return huxerui::codeeditor::CodeEditor(std::move(options), controller).With(Grow{});
 }
@@ -38,7 +38,7 @@ UseState(value)          — 在 composable 中声明响应式状态
                             provider、钩子、diff、文档 key）
 ```
 
-**你从不直接对编辑器调用 setter。** 你修改 `UseState`，HuxerUI 重组你的 composable，编辑器的 retained 扩展将新的 `CodeEditorOptions` 与旧值协调——只应用增量，不重置保留状态。
+**你从不直接对编辑器调用 setter。** 你修改 `UseState`，HuxerUI 重组你的 composable，编辑器的 retained 扩展将新的 `EditorOptions` 与旧值协调——只应用增量，不重置保留状态。
 
 ### UseState 驱动的编辑器
 
@@ -52,17 +52,17 @@ View EditorPage() {
   auto dirty_count = UseState(0);
   auto cursor_label = UseState(std::string("行 1, 列 1"));
 
-  const auto controller = UseCodeEditorController();
+  const auto controller = UseEditorController();
   const Document& doc = documents[current_doc.Get()];
 
   // 从状态构建 options — 这是唯一数据源
-  CodeEditorOptions options;
+  EditorOptions options;
   options.document_key = doc.path;
   options.initial_text = doc.content;
   options.font_size = font_size.Get();
 
   if (dark_mode.Get()) {
-    auto theme = CodeEditorTheme::Default();
+    auto theme = EditorTheme::Default();
     theme.background = Color::Rgb(30, 30, 46);
     theme.text_foreground = Color::Rgb(205, 214, 244);
     options.theme = theme;
@@ -79,13 +79,13 @@ View EditorPage() {
 
     // 编辑器 — 声明式，每次重组都协调
     CodeEditor(std::move(options), controller)
-        .On<CodeEditorEvents::CursorChanged>(
+        .On<EditorEvents::CursorChanged>(
             [cursor_label](uint32_t line, uint32_t col) {
               // 事件处理器按值捕获 UseState — 写入使
               // 此作用域失效，更新状态栏
               cursor_label = "行 " + std::to_string(line + 1) + ", 列 " + std::to_string(col + 1);
             })
-        .On<CodeEditorEvents::TextChanged>([dirty_count] {
+        .On<EditorEvents::TextChanged>([dirty_count] {
           dirty_count = dirty_count.Get() + 1;
         })
         .With(Grow{}),
@@ -109,10 +109,10 @@ View EditorPage() {
 
 ### Controller 也是 UseState
 
-`UseCodeEditorController()` 创建 `State<CodeEditorController>` — controller 是作用域状态，不是单例。在同一作用域的重组间持久，编辑器挂载/卸载时自动重连：
+`UseEditorController()` 创建 `State<EditorController>` — controller 是作用域状态，不是单例。在同一作用域的重组间持久，编辑器挂载/卸载时自动重连：
 
 ```cpp
-const auto controller = UseCodeEditorController();  // State<Controller>
+const auto controller = UseEditorController();  // State<Controller>
 
 Button("格式化").OnClick([controller] {
   // 编辑器未挂载时方法返回 false
@@ -131,7 +131,7 @@ Button("格式化").OnClick([controller] {
 auto text_length = UseState(std::size_t(0));
 
 CodeEditor(options)
-    .On<CodeEditorEvents::TextChanged>([controller, text_length] {
+    .On<EditorEvents::TextChanged>([controller, text_length] {
       // 读取权威文本并发布为状态
       text_length = controller.Text().size();
     });
@@ -139,13 +139,13 @@ CodeEditor(options)
 
 ---
 
-## 3. CodeEditorOptions（选项）
+## 3. EditorOptions（选项）
 
 ### 文档
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `initial_text` | `std::string` | `""` | 初始 UTF-8 文档内容。编辑器挂载或 `document_key` 变化时加载。**不是**受控值——挂载后文本由 retained 内核持有；用 `CodeEditorEvents::TextChanged` 监听变更，用 `Controller::Text()` / `LoadDocument()` 读取或替换。 |
+| `initial_text` | `std::string` | `""` | 初始 UTF-8 文档内容。编辑器挂载或 `document_key` 变化时加载。**不是**受控值——挂载后文本由 retained 内核持有；用 `EditorEvents::TextChanged` 监听变更，用 `Controller::Text()` / `LoadDocument()` 读取或替换。 |
 | `document_key` | `std::string` | `""` | 文档稳定标识。重组间改变它会重新加载 `initial_text` 并重建编辑器状态（撤销历史、光标、折叠重置）。留空保持单一默认文档。不同 key 实现多文档切换。 |
 
 ### 排版
@@ -156,7 +156,7 @@ CodeEditor(options)
 | `font_size` | `float` | `14.0` | 正文字号（逻辑像素）。 |
 | `line_spacing_add` | `float` | `0.0` | 每行额外增加的行距。 |
 | `line_spacing_mult` | `float` | `1.2` | 行高倍率。 |
-| `theme` | `std::optional<CodeEditorTheme>` | `{}` | 显式视觉覆盖。为空时编辑器从环境 `UseTheme()` 派生，自动跟随 `MaterialTheme` 亮/暗切换。详见 §3。 |
+| `theme` | `std::optional<EditorTheme>` | `{}` | 显式视觉覆盖。为空时编辑器从环境 `UseTheme()` 派生，自动跟随 `MaterialTheme` 亮/暗切换。详见 §3。 |
 
 ### 编辑行为
 
@@ -179,7 +179,7 @@ CodeEditor(options)
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `decoration_providers` | `std::vector<std::shared_ptr<CodeEditorDecorationProvider>>` | `{}` | 装饰来源；编辑器合并所有结果。见 §5。 |
+| `decoration_providers` | `std::vector<std::shared_ptr<EditorDecorationProvider>>` | `{}` | 装饰来源；编辑器合并所有结果。见 §5。 |
 | `accept_phantom_on_tab` | `bool` | `true` | Tab 是否提交光标行幽灵文本。 |
 
 ### 钩子与 Diff
@@ -201,7 +201,7 @@ CodeEditor(options)
 | `scrollbar_mode` | `int` | `0` | `0` 常显 / `1` 滚动时 / `2` 不显示。 |
 | `content_start_padding` | `float` | `0.0` | 行号区与文本间距。 |
 
-## 4. CodeEditorTheme（主题）
+## 4. EditorTheme（主题）
 
 所有颜色为 `huxerui::Color`。工厂：`Default()`（亮色参考）、`FromThemeSpec(const ThemeSpec&)`（环境派生）。含 `operator==`。
 
@@ -224,14 +224,14 @@ CodeEditor(options)
 **补全面板**：`completion_background/border/selected_background/label/detail`。
 
 ```cpp
-auto theme = huxerui::codeeditor::CodeEditorTheme::Default();
+auto theme = huxerui::codeeditor::EditorTheme::Default();
 theme.background = Color::Rgb(30, 30, 46);
 theme.text_foreground = Color::Rgb(205, 214, 244);
 theme.syntax_keyword = Color::Rgb(203, 166, 247);
 options.theme = theme;
 ```
 
-## 5. CodeEditorEvents（事件）
+## 5. EditorEvents（事件）
 
 所有事件通过 `.On<事件>(处理器)` 绑定在 `CodeEditor()` 返回的 `View` 上。行/列参数均为 **0 基**；显示给用户时 `line + 1`。
 
@@ -251,22 +251,22 @@ options.theme = theme;
 
 ```cpp
 CodeEditor(options, controller)
-    .On<CodeEditorEvents::CursorChanged>([status](uint32_t line, uint32_t col) {
+    .On<EditorEvents::CursorChanged>([status](uint32_t line, uint32_t col) {
       status = "行 " + std::to_string(line + 1) + ", 列 " + std::to_string(col + 1);
     })
-    .On<CodeEditorEvents::GutterIconClicked>([this](uint32_t line, int32_t id) {
+    .On<EditorEvents::GutterIconClicked>([this](uint32_t line, int32_t id) {
       if (id == 2) ToggleBreakpoint(line);
     });
 ```
 
-## 6. CodeEditorDecorationProvider（装饰提供者）
+## 6. EditorDecorationProvider（装饰提供者）
 
 ```cpp
-class CodeEditorDecorationProvider {
+class EditorDecorationProvider {
  public:
-  virtual ~CodeEditorDecorationProvider() = default;
-  virtual CodeEditorDecorationResult ProvideDecorations(
-      const CodeEditorDecorationContext& context) = 0;
+  virtual ~EditorDecorationProvider() = default;
+  virtual EditorDecorationResult ProvideDecorations(
+      const EditorDecorationContext& context) = 0;
 };
 ```
 
@@ -281,7 +281,7 @@ class CodeEditorDecorationProvider {
 | `cursor_column` | `uint32_t` | 光标列（0 基）。 |
 | `viewport_settled` | `bool` | 快速滚动中 `false`（跳过重计算）；稳定后 `true`。 |
 | `document_text` | `const std::string*` | 完整 UTF-8 文档文本。可能 `nullptr`。仅调用期间有效。 |
-| `text_changes` | `std::vector<CodeEditorTextChange>` | 上次刷新以来的增量编辑。 |
+| `text_changes` | `std::vector<TextChange>` | 上次刷新以来的增量编辑。 |
 
 ### 增量变更（TextChange）
 
@@ -329,10 +329,10 @@ class CodeEditorDecorationProvider {
 
 参考实现：`examples/preview/src/sweetline_provider.cpp`
 
-## 7. CodeEditorController（控制器）
+## 7. EditorController（控制器）
 
 ```cpp
-inline CodeEditorController UseCodeEditorController();
+inline EditorController UseEditorController();
 ```
 
 | 方法 | 返回值 | 说明 |
@@ -373,7 +373,7 @@ Kind：`Keyword`(0) `Function`(1) `Variable`(2) `Class`(3) `Interface`(4) `Modul
 ## 9. 架构
 
 ```text
-CodeEditor() -> Canvas -> CodeEditorBehavior -> Extension(NodeExtension) -> EditorHolder -> SweetEditor EditorCore
+CodeEditor() -> Canvas -> EditorBehavior -> Extension(NodeExtension) -> EditorHolder -> SweetEditor EditorCore
 ```
 
 ## 10. 限制
@@ -393,7 +393,7 @@ CodeEditor() -> Canvas -> CodeEditorBehavior -> Extension(NodeExtension) -> Edit
 ### 最小编辑器
 
 ```cpp
-huxerui::codeeditor::CodeEditorOptions options;
+huxerui::codeeditor::EditorOptions options;
 options.initial_text = "// 在此输入\n";
 return huxerui::codeeditor::CodeEditor(std::move(options)).With(Grow{});
 ```
@@ -402,20 +402,20 @@ return huxerui::codeeditor::CodeEditor(std::move(options)).With(Grow{});
 
 ### 语法高亮
 
-实现 `CodeEditorDecorationProvider`，返回可见范围内的 `syntax_spans`：
+实现 `EditorDecorationProvider`，返回可见范围内的 `syntax_spans`：
 
 ```cpp
-class MyHighlighter final : public huxerui::codeeditor::CodeEditorDecorationProvider {
+class MyHighlighter final : public huxerui::codeeditor::EditorDecorationProvider {
  public:
-  CodeEditorDecorationResult ProvideDecorations(
-      const CodeEditorDecorationContext& context) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(
+      const EditorDecorationContext& context) override {
+    EditorDecorationResult result;
     for (uint32_t line = context.visible_start_line; line <= context.visible_end_line; ++line) {
       const std::string text = GetLineText(line);  // 你的文档模型
       // 对 text 分词并产出 span...
       result.syntax_spans.emplace_back(line, std::vector{
-          {0, 3, CodeEditorStyle::Keyword},   // "int" 第 0..3 列
-          {8, 4, CodeEditorStyle::Function},  // "main" 第 8..12 列
+          {0, 3, EditorStyle::Keyword},   // "int" 第 0..3 列
+          {8, 4, EditorStyle::Function},  // "main" 第 8..12 列
       });
     }
     return result;
@@ -437,7 +437,7 @@ View FileTabs() {
   auto current_file = UseState(0);
   const Document& doc = documents[current_file.Get()];
 
-  CodeEditorOptions options;
+  EditorOptions options;
   options.document_key = doc.path;       // 改变这个就切换文档
   options.initial_text = doc.content;
 
@@ -454,15 +454,15 @@ View FileTabs() {
 options.read_only = true;
 options.decoration_providers.push_back(std::make_shared<LinterProvider>(diagnostics));
 
-class LinterProvider final : public CodeEditorDecorationProvider {
+class LinterProvider final : public EditorDecorationProvider {
  public:
   explicit LinterProvider(std::vector<Lint> diags) : diagnostics_(std::move(diags)) {}
 
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& ctx) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& ctx) override {
+    EditorDecorationResult result;
     for (const Lint& lint : diagnostics_) {
       if (lint.line < ctx.visible_start_line || lint.line > ctx.visible_end_line) continue;
-      result.diagnostics.emplace_back(lint.line, std::vector<CodeEditorDiagnostic>{
+      result.diagnostics.emplace_back(lint.line, std::vector<Diagnostic>{
           {lint.column, lint.length, lint.severity, lint.message},
       });
     }
@@ -493,7 +493,7 @@ Snippet 语法：`${N:text}` = Tab 停靠点带占位符，`$0` = 最终光标�
 ### 程序化搜索控制
 
 ```cpp
-const auto controller = UseCodeEditorController();
+const auto controller = UseEditorController();
 // ...
 Button("查找").OnClick([controller] { controller.ToggleSearch(); }),
 Button("下一个").OnClick([controller] { controller.FindNext(); }),
@@ -505,7 +505,7 @@ Ctrl+F 切换内置搜索栏（含查找/上一个/下一个/替换/全部/关�
 ### 暗色主题
 
 ```cpp
-auto theme = CodeEditorTheme::Default();
+auto theme = EditorTheme::Default();
 theme.background = Color::Rgb(30, 30, 46);
 theme.gutter_background = Color::Rgb(24, 24, 37);
 theme.text_foreground = Color::Rgb(205, 214, 244);
@@ -533,11 +533,11 @@ auto cursor_status = UseState(std::string("行 1, 列 1"));
 auto dirty = UseState(false);
 
 CodeEditor(options)
-    .On<CodeEditorEvents::CursorChanged>([cursor_status](uint32_t line, uint32_t col) {
+    .On<EditorEvents::CursorChanged>([cursor_status](uint32_t line, uint32_t col) {
       cursor_status = "行 " + std::to_string(line + 1) + ", 列 " + std::to_string(col + 1);
     })
-    .On<CodeEditorEvents::TextChanged>([dirty] { dirty = true; })
-    .On<CodeEditorEvents::SelectionChanged>(
+    .On<EditorEvents::TextChanged>([dirty] { dirty = true; })
+    .On<EditorEvents::SelectionChanged>(
         [](uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec) {
           // sl..ec 是选区范围（0 基，已归一化）
         }
@@ -547,13 +547,13 @@ CodeEditor(options)
 ### 行号区图标（断点）
 
 ```cpp
-class BreakpointProvider final : public CodeEditorDecorationProvider {
+class BreakpointProvider final : public EditorDecorationProvider {
  public:
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& ctx) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& ctx) override {
+    EditorDecorationResult result;
     for (uint32_t line : breakpoints_) {
       if (line >= ctx.visible_start_line && line <= ctx.visible_end_line) {
-        result.gutter_icons.emplace_back(line, std::vector<CodeEditorGutterIcon>{{2}});  // 2 = 圆形
+        result.gutter_icons.emplace_back(line, std::vector<GutterIcon>{{2}});  // 2 = 圆形
       }
     }
     return result;
@@ -564,7 +564,7 @@ class BreakpointProvider final : public CodeEditorDecorationProvider {
 };
 
 // 处理点击：
-editor.On<CodeEditorEvents::GutterIconClicked>([provider](uint32_t line, int32_t id) {
+editor.On<EditorEvents::GutterIconClicked>([provider](uint32_t line, int32_t id) {
   if (id == 2) provider->Toggle(line);
 });
 ```
@@ -581,14 +581,14 @@ options.initial_text = 当前文件内容;     // 用户正在编辑的
 ### AI 内联建议（幽灵文本）
 
 ```cpp
-class CopilotProvider final : public CodeEditorDecorationProvider {
+class CopilotProvider final : public EditorDecorationProvider {
  public:
-  CodeEditorDecorationResult ProvideDecorations(const CodeEditorDecorationContext& ctx) override {
-    CodeEditorDecorationResult result;
+  EditorDecorationResult ProvideDecorations(const EditorDecorationContext& ctx) override {
+    EditorDecorationResult result;
     if (ctx.cursor_line < 100) {
       result.phantom_texts.emplace_back(
           ctx.cursor_line,
-          std::vector<CodeEditorPhantomText>{{GetLineColumns(ctx.cursor_line), " // AI 建议补全"}}
+          std::vector<PhantomText>{{GetLineColumns(ctx.cursor_line), " // AI 建议补全"}}
       );
     }
     return result;
