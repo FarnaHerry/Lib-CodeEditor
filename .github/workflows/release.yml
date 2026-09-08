@@ -87,7 +87,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 12zhan/HuxerUI
-          ref: feat/font-registration
+          # Pinned to a35d63fbce, the newest feat/font-registration commit whose
+          # tree still compiles: the branch tip (c60af6d) removed
+          # include/huxerui/font.h while every platform renderer still includes
+          # it, so a clean checkout of the tip cannot build anywhere. This
+          # commit carries the full font-registration work including
+          # Font::FromRawAsset.
+          ref: a35d63fbcef013dabfcdac752e677a2b910fc803
           path: huxerui
 
       - name: Install HuxerUI SDK (Windows)
