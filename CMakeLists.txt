@@ -136,3 +136,31 @@ target_include_directories(codeeditor PUBLIC
 )
 
 add_library(HuxerUI::CodeEditor ALIAS codeeditor)
+
+# Component tests exercise pure public-API logic (options validation,
+# disconnected controller behavior, theme derivation). They require the
+# Catch2 amalgamation shipped with a source HuxerUI checkout; an installed
+# SDK build skips them.
+set(HUXERUI_CODEEDITOR_DEFAULT_TESTS OFF)
+if (NOT HUXERUI_LIBRARY_GRAPH_ONLY AND NOT EMSCRIPTEN AND NOT IOS AND NOT ANDROID
+        AND HUXERUI_HOME AND EXISTS "${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
+    set(HUXERUI_CODEEDITOR_DEFAULT_TESTS ON)
+endif ()
+option(HUXERUI_CODEEDITOR_BUILD_TESTS "Build CodeEditor component tests" ${HUXERUI_CODEEDITOR_DEFAULT_TESTS})
+if (HUXERUI_CODEEDITOR_BUILD_TESTS)
+    enable_testing()
+    include("${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
+    add_executable(codeeditor_tests
+            tests/test_main.cpp
+            tests/test_options_validation.cpp
+            tests/test_editor_controller.cpp
+            tests/test_editor_theme.cpp
+    )
+    target_link_libraries(codeeditor_tests
+            PRIVATE
+                codeeditor
+                HuxerUI::huxerui_static
+                huxerui_3p_catch2
+    )
+    add_test(NAME codeeditor_tests COMMAND codeeditor_tests)
+endif ()
