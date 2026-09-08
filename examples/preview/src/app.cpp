@@ -311,11 +311,11 @@ std::array<DemoDocument, kDemoFileCount> LoadDemoDocuments(
     const RawAsset& gc_file
 ) {
   return {{
-      {kDemoFiles[0].key, kDemoFiles[0].label, kCppDemoText, cpp_syntax.ToString()},
-      {kDemoFiles[1].key, kDemoFiles[1].label, gc_file.ToString(), cpp_syntax.ToString()},
-      {kDemoFiles[2].key, kDemoFiles[2].label, java_file.ToString(), java_syntax.ToString()},
-      {kDemoFiles[3].key, kDemoFiles[3].label, kotlin_file.ToString(), kotlin_syntax.ToString()},
-      {kDemoFiles[4].key, kDemoFiles[4].label, lua_file.ToString(), lua_syntax.ToString()},
+      {kDemoFiles[0].key, kDemoFiles[0].label, kCppDemoText, cpp_syntax.ReadString()},
+      {kDemoFiles[1].key, kDemoFiles[1].label, gc_file.ReadString(), cpp_syntax.ReadString()},
+      {kDemoFiles[2].key, kDemoFiles[2].label, java_file.ReadString(), java_syntax.ReadString()},
+      {kDemoFiles[3].key, kDemoFiles[3].label, kotlin_file.ReadString(), kotlin_syntax.ReadString()},
+      {kDemoFiles[4].key, kDemoFiles[4].label, lua_file.ReadString(), lua_syntax.ReadString()},
   }};
 }
 
