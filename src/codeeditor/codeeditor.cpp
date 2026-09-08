@@ -1010,9 +1010,11 @@ public:
 
   // TextSelectionClient: the editor core owns pointer gestures, double-tap
   // word selection, and drag-handle extension through its gesture pipeline.
-  // These runtime callbacks return false so the HuxerUI selection overlay
-  // (handles + toolbar) stays hidden — the editor draws its own handles and
-  // would otherwise render duplicates that ghost while dragging.
+  // SelectWord, ExtendSelection, and QuerySelectionGeometry return
+  // negative results so the HuxerUI selection overlay (handles + toolbar)
+  // stays hidden — the editor draws its own handles and would otherwise
+  // render duplicates that ghost while dragging. ClearSelection stays
+  // functional: the runtime clears the editor selection on outside taps.
   bool SelectWord(Point) override {
     return false;
   }
@@ -1021,8 +1023,19 @@ public:
     return false;
   }
 
-  bool QuerySelectionGeometry(Rect&, Rect&) const override {
-    return false;
+  bool ClearSelection() override {
+    if (core_->getSelection().isCollapsed()) {
+      return false;
+    }
+    const se::EditorActionResult result = core_->clearSelection();
+    if (result.selection_changed || result.cursor_changed) {
+      NotifySelectionChanged();
+    }
+    return true;
+  }
+
+  std::optional<TextSelectionGeometry> QuerySelectionGeometry() const override {
+    return std::nullopt;
   }
 
   Color SelectionHandleColor() const noexcept override {
@@ -3640,7 +3653,7 @@ struct EditorBehavior {
   huxerui::State<bool> search_visible;
 
   struct Extension final : NodeExtension {
-    Extension(MountedNode& node, const EditorBehavior& behavior)
+    Extension(ViewNode& node, const EditorBehavior& behavior)
         : measurer_(behavior.measurer),
           options_(behavior.options),
           events_(behavior.events),
@@ -3736,7 +3749,7 @@ struct EditorBehavior {
       state->select_all = nullptr;
     }
 
-    void Update(MountedNode& node, const EditorBehavior& behavior) {
+    void Update(ViewNode& node, const EditorBehavior& behavior) {
       static_cast<void>(node);
       measurer_ = behavior.measurer;
       options_ = behavior.options;
@@ -3768,7 +3781,7 @@ struct EditorBehavior {
       holder_->SyncDisplayOptions(behavior.options.wrap_mode, behavior.options.sticky_gutter);
     }
 
-    PointerResult OnPointer(MountedNode& node, const PointerEvent& event) override {
+    PointerResult OnPointer(ViewNode& node, const PointerEvent& event) override {
       static_cast<void>(node);
       CODEEDITOR_TRACE(
           "pointer id=%lld type=%d pos=(%.0f,%.0f) device=%d", static_cast<long long>(event.pointer_id),
@@ -3802,7 +3815,7 @@ struct EditorBehavior {
       return changed ? PointerResult::Handled : PointerResult::Ignored;
     }
 
-    bool OnKey(MountedNode& node, const KeyEvent& event) override {
+    bool OnKey(ViewNode& node, const KeyEvent& event) override {
       static_cast<void>(node);
       if (holder_->HandleKey(event)) {
         InvalidatePaint();
@@ -3811,8 +3824,9 @@ struct EditorBehavior {
       return false;
     }
 
-    void OnFocusChanged(MountedNode& node, bool focused) override {
+    void OnFocusChanged(ViewNode& node, bool focused, bool reverse) override {
       static_cast<void>(node);
+      static_cast<void>(reverse);
       holder_->SetFocused(focused);
       InvalidatePaint();
     }
@@ -3823,7 +3837,7 @@ struct EditorBehavior {
     }
 #endif
 
-    FrameResult OnFrame(MountedNode& node, const FrameInfo& frame) override {
+    FrameResult OnFrame(ViewNode& node, const FrameInfo& frame) override {
       static_cast<void>(node);
       const bool changed = holder_->AdvanceFrame(frame.timestamp);
       if (changed) {
@@ -3846,7 +3860,7 @@ struct EditorBehavior {
       return {};
     }
 
-    void PaintAboveContent(const MountedNode& node, PaintContext& context) const override {
+    void PaintAboveContent(const ViewNode& node, PaintContext& context) const override {
       const Size size = node.LayoutSize();
       // Clip the editor painting to its own bounds so cursor, focus line,
       // selection backgrounds, and other overdraw cannot bleed into the gutter
@@ -3870,7 +3884,7 @@ struct EditorBehavior {
     std::optional<Point> pointer_down_;
     bool pointer_dragging_ = false;
 
-    bool HitTest(MountedNode& node, Point position) const override {
+    bool HitTest(ViewNode& node, Point position) const override {
       const Rect bounds = node.Bounds();
       return position.x >= bounds.x && position.x <= bounds.x + bounds.width &&
              position.y >= bounds.y && position.y <= bounds.y + bounds.height;
