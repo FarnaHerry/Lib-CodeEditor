@@ -157,6 +157,16 @@ jobs:
           # the installers above: the library dependency becomes the source
           # checkout while the CLI keeps coming from the released SDK.
           echo "HUXERUI_HOME=${GITHUB_WORKSPACE}/huxerui" >> "${GITHUB_ENV}"
+          # A source-checkout HuxerUI also enables the optional CodeEditor
+          # component tests, and that target relies on the compiler's default
+          # C++ standard (gnu++17) while the HuxerUI headers it includes are
+          # C++20. Force the standard here until the component's CMake sets
+          # it for the tests target.
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "CXXFLAGS=/std:c++20" >> "${GITHUB_ENV}"
+          else
+            echo "CXXFLAGS=-std=c++20" >> "${GITHUB_ENV}"
+          fi
           echo "HuxerUI library source at ${GITHUB_WORKSPACE}/huxerui (huxerui CLI from the released SDK)"
 
       - name: Install Linux build dependencies (desktop)
@@ -278,7 +288,10 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    # Publish even when a matrix leg fails: whatever platform artifacts were
+    # uploaded still reach the release instead of skipping publication
+    # entirely when one platform's dependency is broken.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
