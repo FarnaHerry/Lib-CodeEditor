@@ -3495,6 +3495,10 @@ struct SearchBridge {
 namespace detail {
 
 struct EditorControllerState {
+  // Editor extension currently bound to this state. Guards teardown so one
+  // editor's unmount cannot disconnect a different editor that reused the
+  // same controller value.
+  const void* owner = nullptr;
   std::function<void(const std::string&, const std::string&)> load_document;
   std::function<std::string()> get_text;
   std::function<bool(uint32_t, uint32_t)> set_cursor;
@@ -3633,6 +3637,7 @@ struct EditorBehavior {
   EditorOptions options;
   EditorController controller;
   huxerui::EventEmitter events;
+  huxerui::State<bool> search_visible;
 
   struct Extension final : NodeExtension {
     Extension(MountedNode& node, const EditorBehavior& behavior)
@@ -3647,13 +3652,24 @@ struct EditorBehavior {
               behavior.events,
               behavior.controller
           )),
+          search_visible_(behavior.search_visible),
           document_key_(behavior.options.document_key) {
       BindController(behavior.controller);
       static_cast<void>(node);
     }
 
+    ~Extension() {
+      UnbindController();
+    }
+
+    // Every controller entry point is bound here and released together, so
+    // controller calls after the editor unmounts observe the documented
+    // disconnected behavior instead of touching a destroyed extension.
     void BindController(EditorController controller) {
-      auto& state = detail::EditorControllerAccess::State(controller);
+      UnbindController();
+      controller_ = std::move(controller);
+      auto& state = detail::EditorControllerAccess::State(controller_);
+      state->owner = this;
       state->load_document = [this](const std::string& key, const std::string& text) {
         document_key_ = key;
         options_.initial_text = text;
@@ -3670,6 +3686,11 @@ struct EditorBehavior {
       state->replace_current = [this](const std::string& text) { holder_->ReplaceCurrent(text); };
       state->replace_all = [this](const std::string& text) { holder_->ReplaceAll(text); };
       state->clear_search = [this] { holder_->CloseSearch(); };
+      state->toggle_search = [this] {
+        const bool next = !search_visible_.Get();
+        search_visible_ = next;
+        events_.Emit<EditorEvents::SearchVisibilityChanged>(next);
+      };
       // Clipboard / selection actions for application toolbars.
       state->cut = [this] {
         if (!holder_) return false;
@@ -3693,11 +3714,33 @@ struct EditorBehavior {
       };
     }
 
+    void UnbindController() {
+      const auto& state = detail::EditorControllerAccess::State(controller_);
+      if (state->owner != this) {
+        return;
+      }
+      state->owner = nullptr;
+      state->load_document = nullptr;
+      state->get_text = nullptr;
+      state->set_cursor = nullptr;
+      state->run_search = nullptr;
+      state->find_next = nullptr;
+      state->find_previous = nullptr;
+      state->replace_current = nullptr;
+      state->replace_all = nullptr;
+      state->clear_search = nullptr;
+      state->toggle_search = nullptr;
+      state->cut = nullptr;
+      state->copy = nullptr;
+      state->paste = nullptr;
+      state->select_all = nullptr;
+    }
+
     void Update(MountedNode& node, const EditorBehavior& behavior) {
       static_cast<void>(node);
       measurer_ = behavior.measurer;
       options_ = behavior.options;
-      controller_ = behavior.controller;
+      search_visible_ = behavior.search_visible;
       BindController(behavior.controller);
       // Reconcile declarative configuration without resetting the editor:
       // theme, editing/presentation options, hooks, and provider lists apply
@@ -3837,6 +3880,7 @@ struct EditorBehavior {
     EditorOptions options_;
     huxerui::EventEmitter events_;
     EditorController controller_;
+    huxerui::State<bool> search_visible_;
     std::shared_ptr<EditorHolder> holder_;
     std::string document_key_;
   };
@@ -3908,16 +3952,12 @@ View CodeEditor(EditorOptions options, EditorController controller) {
   const EventEmitter events = UseEvents();
   // Search UI is fully decoupled: the component never draws a search panel.
   // Ctrl+F toggles a reported visibility so applications can show their own
-  // bar (the exported EditorSearchBar or a custom one).
+  // bar (the exported EditorSearchBar or a custom one). The toggle binding
+  // lives on the mounted extension, so it dies with the editor instead of
+  // outliving it inside the controller state.
   auto search_visible = UseState(false);
-  detail::EditorControllerAccess::State(controller)->toggle_search =
-      [search_visible, events] {
-        const bool next = !search_visible.Get();
-        search_visible = next;
-        events.Emit<EditorEvents::SearchVisibilityChanged>(next);
-      };
   View editor = Canvas([](PaintContext&, Size) {}).With(
-      EditorBehavior{&measurer, std::move(effective_options), controller, events}, Focusable{}
+      EditorBehavior{&measurer, std::move(effective_options), controller, events, search_visible}, Focusable{}
   );
   return editor;
 }
