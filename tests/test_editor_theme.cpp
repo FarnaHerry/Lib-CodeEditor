@@ -9,9 +9,14 @@ TEST_CASE("TestEditorThemePresetsAreDistinct") {
   REQUIRE(light == light);
 }
 
-TEST_CASE("TestEditorThemeDerivesFromAmbientThemeSpec") {
-  const auto derived = huxerui::codeeditor::EditorTheme::FromThemeSpec(huxerui::ThemeSpec::Default());
-  // Derived themes stay self-consistent: text and background must differ so
-  // the editor remains readable on the ambient surface color.
+TEST_CASE("TestEditorThemeDerivationMapsTheAmbientColorScheme") {
+  // A default-constructed specification carries the ambient palette fields
+  // the derivation anchors onto, so the test exercises the mapping contract
+  // without pulling SDK theme presets into the link.
+  huxerui::ThemeSpec spec;
+  const auto derived = huxerui::codeeditor::EditorTheme::FromThemeSpec(spec);
+
+  REQUIRE(derived.background == spec.colors.surface);
+  REQUIRE(derived.text_foreground == spec.colors.on_surface);
   REQUIRE_FALSE(derived.text_foreground == derived.background);
 }
