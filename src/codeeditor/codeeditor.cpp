@@ -2114,15 +2114,22 @@ public:
 
     cached_phantom_entries_ = receiver.merged.phantom_texts;
     // Reserve gutter icon space only while icons actually exist; with none the
-    // auto-sized gutter collapses back to digits + margins.
-    bool has_gutter_icons = false;
-    for (const auto& [line, icons] : receiver.merged.gutter_icons) {
-      if (!icons.empty()) {
-        has_gutter_icons = true;
-        break;
+    // auto-sized gutter collapses back to digits + margins. Re-evaluating the
+    // reserve on every refresh let the gutter width oscillate whenever the
+    // provider's mid-scroll icon slice changed between frames, shifting the
+    // line numbers every frame. Transitions therefore apply only on settled
+    // refreshes and the gutter stays width-stable while scrolling.
+    uint32_t reserve = last_gutter_icon_reserve_;
+    if (settled) {
+      bool has_gutter_icons = false;
+      for (const auto& [line, icons] : receiver.merged.gutter_icons) {
+        if (!icons.empty()) {
+          has_gutter_icons = true;
+          break;
+        }
       }
+      reserve = has_gutter_icons ? 1 : 0;
     }
-    const uint32_t reserve = has_gutter_icons ? 1 : 0;
     if (reserve != last_gutter_icon_reserve_) {
       last_gutter_icon_reserve_ = reserve;
       core_->setMaxGutterIcons(reserve);
