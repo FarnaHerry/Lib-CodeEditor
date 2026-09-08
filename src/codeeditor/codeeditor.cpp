@@ -23,6 +23,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -3889,6 +3890,17 @@ struct EditorBehavior {
              position.y >= bounds.y && position.y <= bounds.y + bounds.height;
     }
 
+    // Screen-reader surface for the document: the editor is one text field
+    // whose value is the current content. Action kinds such as SetText stay
+    // unadvertised until the component routes them into the editor core.
+    void BuildSemantics(SemanticBuilder& builder) const override {
+      Semantics semantics;
+      semantics.role = SemanticRole::TextField;
+      semantics.value = holder_->Text();
+      semantics.read_only = options_.read_only;
+      builder.SetOwner(std::move(semantics));
+    }
+
     huxerui::TextMeasurer* measurer_ = nullptr;
     EditorOptions options_;
     huxerui::EventEmitter events_;
@@ -3937,8 +3949,29 @@ View EditorSearchBar(
   }.With(CrossAlign(CrossAxisAlignment::Stretch));
 }
 
+// Rejects configuration the editor core cannot honor before any composition
+// state is allocated.
+void ValidateEditorOptions(const EditorOptions& options) {
+  if (!(options.font_size > 0.0F)) {
+    throw std::invalid_argument("HuxerUI CodeEditor font_size must be positive");
+  }
+  if (options.tab_size == 0) {
+    throw std::invalid_argument("HuxerUI CodeEditor tab_size must be positive");
+  }
+  if (options.line_spacing_mult < 0.0F) {
+    throw std::invalid_argument("HuxerUI CodeEditor line_spacing_mult must be non-negative");
+  }
+  if (options.wrap_mode < 0 || options.wrap_mode > 2) {
+    throw std::invalid_argument("HuxerUI CodeEditor wrap_mode must be 0 (none), 1 (character), or 2 (word)");
+  }
+  if (options.scrollbar_mode < 0 || options.scrollbar_mode > 2) {
+    throw std::invalid_argument("HuxerUI CodeEditor scrollbar_mode must be 0 (always), 1 (transient), or 2 (never)");
+  }
+}
+
 [[huxerui::composable]]
 View CodeEditor(EditorOptions options, EditorController controller) {
+  ValidateEditorOptions(options);
   TextMeasurer& measurer = UseTextMeasurer();
   // An empty document key keeps one default document so callers never have to
   // invent a storage key. The theme resolves from the ambient HuxerUI theme
