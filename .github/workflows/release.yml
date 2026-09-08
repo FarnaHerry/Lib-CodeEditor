@@ -52,12 +52,15 @@ jobs:
       # 3dparty/SweetEditor and 3dparty/SweetLine are recorded as gitlinks
       # (mode 160000) without a .gitmodules file, so a fresh checkout has no
       # submodule mechanism to populate them. Fetch each vendored repository at
-      # the exact commit the parent records.
+      # the exact commit the parent records. SweetEditor's recorded commit
+      # 377f90f was never pushed upstream (FinalScave/SweetEditor rejects it
+      # with "not our ref"), so it is fetched from the 12zhan/SweetEditor
+      # mirror that keeps that commit reachable.
       - name: Populate vendored dependencies (3dparty gitlinks)
         shell: bash
         run: |
           set -euo pipefail
-          for entry in "SweetEditor https://github.com/FinalScave/SweetEditor" "SweetLine https://github.com/FinalScave/SweetLine"; do
+          for entry in "SweetEditor https://github.com/12zhan/SweetEditor" "SweetLine https://github.com/FinalScave/SweetLine"; do
             name="${entry%% *}"
             url="${entry#* }"
             sha="$(git ls-tree HEAD "3dparty/${name}" | awk '{print $3}')"
