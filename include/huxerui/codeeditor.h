@@ -454,6 +454,10 @@ struct EditorOptions {
   float scrollbar_thickness = 0.0F;
   int scrollbar_mode = 0;
   float content_start_padding = 0.0F;
+  // Horizontal margin around the line numbers (left of the digits, right of
+  // the gutter icons and fold arrows). Lower values tighten the gutter
+  // against the content. Applied when the editor is created.
+  float line_number_margin = 5.0F;
 };
 
 // A HuxerUI code editor component backed by the SweetEditor core.

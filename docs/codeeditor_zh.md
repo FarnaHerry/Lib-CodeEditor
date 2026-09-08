@@ -202,6 +202,7 @@ CodeEditor(options)
 | `scrollbar_thickness` | `float` | `0.0` | 滚动条厚度。 |
 | `scrollbar_mode` | `int` | `0` | `0` 常显 / `1` 滚动时 / `2` 不显示。 |
 | `content_start_padding` | `float` | `0.0` | 行号区与文本间距。 |
+| `line_number_margin` | `float` | `5.0` | 行号左右留白（行号左侧、gutter 图标与折叠箭头右侧）。编辑器创建时应用。 |
 
 ## 4. EditorTheme（主题）
 

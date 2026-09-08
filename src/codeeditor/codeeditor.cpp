@@ -1300,6 +1300,12 @@ public:
     if (options.content_start_padding > 0.0F) {
       core_->setContentStartPadding(options.content_start_padding);
     }
+    // The core exposes no setter for the gutter margin; write it through the
+    // metrics accessor. The vendor never overwrites this field after init, so
+    // the value persists for the editor lifetime.
+    if (options.line_number_margin > 0.0F) {
+      core_->getLayoutMetrics().line_number_margin = options.line_number_margin;
+    }
     // Scrollbar customization (defaults are sensible; hosts may override).
     if (options.scrollbar_thickness > 0.0F || options.scrollbar_mode != 0) {
       se::ScrollbarConfig scrollbar;

@@ -205,6 +205,7 @@ Composition validates the configuration before any editor state is allocated and
 | `scrollbar_thickness` | `float` | `0.0` | Scrollbar thickness. `0.0` = core default. |
 | `scrollbar_mode` | `int` | `0` | `0` = always, `1` = transient, `2` = never. |
 | `content_start_padding` | `float` | `0.0` | Extra padding between gutter and text. |
+| `line_number_margin` | `float` | `5.0` | Horizontal margin around the line numbers (left of the digits, right of the gutter icons and fold arrows). Applied when the editor is created. |
 
 ---
 
