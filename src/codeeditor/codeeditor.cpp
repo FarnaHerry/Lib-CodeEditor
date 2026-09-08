@@ -1297,6 +1297,10 @@ public:
       );
     }
     core_->setGutterSticky(options.sticky_gutter);
+    // AUTO collapses the fold-arrow lane whenever the visible range has no
+    // fold regions, which resized the gutter while scrolling. A code editor
+    // keeps the lane stable instead.
+    core_->setFoldArrowMode(se::FoldArrowMode::ALWAYS);
     if (options.content_start_padding > 0.0F) {
       core_->setContentStartPadding(options.content_start_padding);
     }
@@ -2134,7 +2138,11 @@ public:
           break;
         }
       }
-      reserve = has_gutter_icons ? 1 : 0;
+      // Sticky: once the document shows gutter icons the lane stays reserved,
+      // so scrolling into icon-free ranges never resizes the gutter.
+      if (has_gutter_icons) {
+        reserve = 1;
+      }
     }
     if (reserve != last_gutter_icon_reserve_) {
       last_gutter_icon_reserve_ = reserve;
