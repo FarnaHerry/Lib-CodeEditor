@@ -2040,9 +2040,14 @@ public:
   // decoration set to the core.
   void RefreshDecorations(bool settled) {
     if (!core_ || !document_) return;
-    const bool needs_text = !pending_changes_.empty();
-    if (needs_text) synced_document_text_ = document_->getU8Text();
-    if (needs_text) {
+    const bool edits_pending = !pending_changes_.empty();
+    // Providers are the only document_text consumers, so skip the
+    // full-document copy while nothing reads it.
+    const bool sync_text = edits_pending && !providers_.empty();
+    if (sync_text) {
+      synced_document_text_ = document_->getU8Text();
+    }
+    if (edits_pending) {
       folds_dirty_ = true;
     }
 
@@ -2055,7 +2060,7 @@ public:
     context.cursor_line = cursor.line;
     context.cursor_column = cursor.column;
     context.viewport_settled = settled;
-    context.document_text = needs_text ? &synced_document_text_ : nullptr;
+    context.document_text = sync_text ? &synced_document_text_ : nullptr;
     context.text_changes = std::move(pending_changes_);
     pending_changes_.clear();
 
