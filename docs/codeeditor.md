@@ -144,6 +144,8 @@ CodeEditor(options)
 
 ## 3. EditorOptions
 
+Composition validates the configuration before any editor state is allocated and throws `std::invalid_argument` with a `HuxerUI`-prefixed message when `font_size` or `tab_size` is not positive, `line_spacing_mult` is negative, or `wrap_mode` / `scrollbar_mode` falls outside `0..2`.
+
 ### Document
 
 | Field | Type | Default | Description |

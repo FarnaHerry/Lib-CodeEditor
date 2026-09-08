@@ -24,6 +24,8 @@ completion, search, decorations, and events are exposed the HuxerUI-native way.
   unified provider interface**
 - No built-in highlighting engine: wire SweetLine, a language server, or your own analyzer through
   `EditorDecorationProvider` (the demo shows the optional SweetLine integration)
+- Accessibility: the editor exposes a text-field semantic whose value is the document, honoring the
+  read-only option; options are validated at composition entry with `HuxerUI`-prefixed diagnostics
 - Typed events aggregated in `EditorEvents`
 
 ## Quick start
@@ -113,6 +115,7 @@ Lib-CodeEditor/
 ├── CMakeLists.txt                 # codeeditor library (links SweetEditor only)
 ├── include/huxerui/codeeditor.h   # public API
 ├── src/codeeditor/                # component implementation
+├── tests/                         # Catch2 suite for pure public-API logic
 ├── examples/preview/              # demo app; wires optional SweetLine highlighting
 │   ├── src/sweetline_provider.*   # reference EditorDecorationProvider
 │   ├── platform/android/...assets/fonts/  # Maple Mono (+ no-ligature build)
@@ -127,6 +130,11 @@ see the [HuxerUI docs](https://github.com/HuxerUI/HuxerUI/tree/main/docs)). The 
 workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)) builds Windows, Linux,
 macOS, and Android on every push to `main` and publishes the artifacts to a continuous GitHub
 Release; tag pushes (`v*`) publish stable releases.
+
+The Catch2 suite under `tests/` covers options validation, disconnected controller behavior, and
+theme derivation. It builds automatically when `HUXERUI_HOME` points at a source HuxerUI checkout
+on a desktop host (the Catch2 amalgamation ships with the checkout); force it with
+`-DHUXERUI_CODEEDITOR_BUILD_TESTS=ON` and run it through `ctest`.
 
 ## Documentation
 

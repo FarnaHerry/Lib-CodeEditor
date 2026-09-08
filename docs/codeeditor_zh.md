@@ -141,6 +141,8 @@ CodeEditor(options)
 
 ## 3. EditorOptions（选项）
 
+组合阶段会在分配任何编辑器状态之前校验配置；当 `font_size` 或 `tab_size` 非正、`line_spacing_mult` 为负、或 `wrap_mode` / `scrollbar_mode` 超出 `0..2` 时，抛出以 `HuxerUI` 为前缀的 `std::invalid_argument`。
+
 ### 文档
 
 | 字段 | 类型 | 默认值 | 说明 |
