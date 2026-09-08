@@ -78,10 +78,11 @@ jobs:
           done
 
       # This branch needs HuxerUI main APIs (Font::FromRawAsset, ViewNode,
-      # RawAsset::ReadString) that no released SDK provides yet, so build
-      # against the feat/font-registration source checkout instead of the
-      # released SDK. Both the huxerui CLI and the project CMake accept a
-      # source checkout as HUXERUI_HOME.
+      # RawAsset::ReadString) that no released SDK library provides yet, so the
+      # HuxerUI library is built from the feat/font-registration source
+      # checkout. The released SDK still supplies the huxerui CLI that drives
+      # the build; the override step below repoints HUXERUI_HOME at the source
+      # checkout, which the CLI accepts and forwards to the project CMake.
       - name: Check out HuxerUI source (feat/font-registration)
         uses: actions/checkout@v4
         with:
@@ -89,16 +90,68 @@ jobs:
           ref: feat/font-registration
           path: huxerui
 
-      - name: Build HuxerUI CLI from source
+      - name: Install HuxerUI SDK (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:TEMP "huxerui-install.ps1"
+          Invoke-WebRequest -Uri "https://github.com/HuxerUI/HuxerUI/releases/latest/download/install.ps1" -OutFile $installer -UseBasicParsing
+          # The installer resolves the latest version through the GitHub API,
+          # which rate-limits unauthenticated requests from shared runner IPs.
+          # Resolve the version here (with a fallback) and pass it explicitly so
+          # the installer skips the API call.
+          $version = $null
+          try {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/HuxerUI/HuxerUI/releases/latest" -Headers @{ "User-Agent" = "sweetedit-ci" }
+            $version = ([string]$release.tag_name).TrimStart("v")
+          } catch {
+            Write-Host "Could not resolve the latest HuxerUI release: $($_.Exception.Message)"
+          }
+          if (-not $version) {
+            $version = "0.2.0"
+            Write-Host "Using fallback version $version"
+          }
+          & $installer -Version $version -Yes
+          $sdk = Join-Path $env:LOCALAPPDATA "HuxerUI"
+          if (-not (Test-Path $sdk)) {
+            throw "HuxerUI SDK was not installed at $sdk"
+          }
+          "HUXERUI_HOME=$sdk" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "$sdk\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          Write-Host "HuxerUI SDK installed at $sdk"
+
+      - name: Install HuxerUI SDK (macOS / Linux / Android)
+        if: matrix.platform != 'windows'
         shell: bash
         run: |
           set -euo pipefail
-          cmake -S huxerui/tools/huxerui_cli -B huxerui-cli-build -DCMAKE_BUILD_TYPE=Release
-          cmake --build huxerui-cli-build --config Release --parallel
-          cmake --install huxerui-cli-build --prefix "${GITHUB_WORKSPACE}/huxerui-cli"
-          echo "${GITHUB_WORKSPACE}/huxerui-cli/bin" >> "${GITHUB_PATH}"
+          curl -fsSL "https://github.com/HuxerUI/HuxerUI/releases/latest/download/install.sh" -o install.sh
+          version="$(curl -fsSL -H "User-Agent: sweetedit-ci" "https://api.github.com/repos/HuxerUI/HuxerUI/releases/latest" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name","").lstrip("v"))' 2>/dev/null || true)"
+          if [ -z "${version}" ]; then
+            version="0.2.0"
+            echo "Using fallback version ${version}"
+          fi
+          sh install.sh --version "${version}" --yes
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            sdk="${HOME}/Library/Developer/HuxerUI"
+          else
+            sdk="${HOME}/.local/share/HuxerUI"
+          fi
+          echo "HUXERUI_HOME=${sdk}" >> "${GITHUB_ENV}"
+          echo "${sdk}/bin" >> "${GITHUB_PATH}"
+          echo "HuxerUI SDK installed at ${sdk}"
+
+      - name: Point HUXERUI_HOME at the HuxerUI source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Later GITHUB_ENV writes win, so this overrides the SDK path set by
+          # the installers above: the library dependency becomes the source
+          # checkout while the CLI keeps coming from the released SDK.
           echo "HUXERUI_HOME=${GITHUB_WORKSPACE}/huxerui" >> "${GITHUB_ENV}"
-          echo "HuxerUI source at ${GITHUB_WORKSPACE}/huxerui, CLI at ${GITHUB_WORKSPACE}/huxerui-cli/bin"
+          echo "HuxerUI library source at ${GITHUB_WORKSPACE}/huxerui (huxerui CLI from the released SDK)"
 
       - name: Install Linux build dependencies (desktop)
         if: matrix.platform == 'linux'
