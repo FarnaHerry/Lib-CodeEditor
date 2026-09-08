@@ -338,7 +338,14 @@ void ApplyDecorations(
 ) {
   // Takes by value: core setters consume non-const vectors, and callers have
   // already released ownership of the merged result.
-  core.clearHighlights(se::SpanLayer::SYNTAX);
+  // Clearing the syntax layer marks every line layout-dirty and leaves the
+  // document blanked until the next model rebuild, which painted unhighlighted
+  // frames while scrolling. A mid-scroll refresh therefore only overwrites the
+  // lines the provider returned; the settled refresh stays authoritative and
+  // clears spans the provider dropped.
+  if (settled) {
+    core.clearHighlights(se::SpanLayer::SYNTAX);
+  }
   core.setBatchLineSpans(se::SpanLayer::SYNTAX, std::move(decorations.syntax_spans));
   if (!settled) {
     core.setIndentGuides(std::move(decorations.indent_guides));
