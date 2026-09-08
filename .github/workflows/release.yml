@@ -172,8 +172,11 @@ jobs:
           # interface does not link PangoFT2, so any executable linking
           # huxerui_static fails with "DSO missing from command line". Add the
           # library through LDFLAGS until the interface links it itself.
+          # --no-as-needed is required because linker flags precede the object
+          # files, where --as-needed would otherwise drop the library before
+          # the static archive that references it is even seen.
           if [ "${{ matrix.platform }}" = "linux" ]; then
-            echo "LDFLAGS=-lpangoft2-1.0" >> "${GITHUB_ENV}"
+            echo "LDFLAGS=-Wl,--no-as-needed -lpangoft2-1.0 -Wl,--as-needed" >> "${GITHUB_ENV}"
           fi
           echo "HuxerUI library source at ${GITHUB_WORKSPACE}/huxerui (huxerui CLI from the released SDK)"
 
