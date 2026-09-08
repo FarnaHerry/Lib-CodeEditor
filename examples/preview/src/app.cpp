@@ -384,6 +384,9 @@ View EditorStatusBar(State<std::string> cursor_status, State<std::string> select
   }.With(Spacing(16.0F), Padding(8.0F));
 }
 
+// Ordinary helper: called during composition, so UseRawResource inside it
+// attaches to the caller's active scope. No composable attribute — it returns
+// an options value, not a View.
 huxerui::codeeditor::EditorOptions MakeEditorOptions(
     const DemoDocument& document,
     bool diff_enabled,
@@ -433,12 +436,12 @@ huxerui::codeeditor::EditorOptions MakeEditorOptions(
   if (dark_theme) {
     options.theme = MakeDarkTheme();
   }
-  // Maple Mono ships as an Android asset font; "@noliga" is the bridge's
-  // convention for disabling ligatures at the shaping level.
+  // Maple Mono resolves through the process font registry (registered by the
+  // caller from the raw resources). Two physical font files: the standard
+  // build carries the ligature features in calt; the NL build has calt
+  // stripped at the GSUB level, which is more reliable than runtime
+  // font-feature settings.
   if (maple_font) {
-    // Two physical font files: the standard build carries the ligature
-    // features in calt; the NL build has calt stripped at the GSUB level,
-    // which is more reliable than runtime font-feature settings.
     options.font_family = ligature ? "MapleMono" : "MapleMonoNL";
   }
   options.original_text = diff_enabled ? diff_original : std::string();
@@ -469,6 +472,15 @@ View EditorDemo() {
   const RawAsset kotlin_file = UseRawResource(RawResource("app", "raw/files/example.kt"));
   const RawAsset lua_file = UseRawResource(RawResource("app", "raw/files/example.lua"));
   const RawAsset gc_file = UseRawResource(RawResource("app", "raw/files/gc.cpp"));
+  // Maple Mono ships in the raw resources and registers into the process font
+  // registry, so Font::Named resolves it on every platform. Two physical font
+  // files: the standard build carries the ligature features in calt; the NL
+  // build has calt stripped at the GSUB level, which is more reliable than
+  // runtime font-feature settings.
+  if (maple_font.Get()) {
+    RegisterFont("MapleMono", UseRawResource(RawResource("app", "raw/fonts/MapleMono.ttf")));
+    RegisterFont("MapleMonoNL", UseRawResource(RawResource("app", "raw/fonts/MapleMonoNL.ttf")));
+  }
   const auto documents = LoadDemoDocuments(
       cpp_syntax, java_syntax, kotlin_syntax, lua_syntax, java_file, kotlin_file, lua_file, gc_file);
   const ToastHandle toast = UseToast();
