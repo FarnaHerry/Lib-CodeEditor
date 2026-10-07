@@ -53,7 +53,9 @@ if (NOT TARGET HuxerUI::huxerui)
 endif ()
 
 # SweetEditor — third-party cross-platform editor core (C++17, vendored).
+set(SWEETEDITOR_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/include")
 if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
+    include(FetchContent)
     set(SWEETEDITOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_STATIC ON CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -61,11 +63,29 @@ if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     set(SWEETEDITOR_BUILD_APPLE_FRAMEWORK OFF CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_WASM_C_ABI OFF CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_WASM_EMBIND OFF CACHE BOOL "" FORCE)
-    add_subdirectory(
-        "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor"
-        "${CMAKE_BINARY_DIR}/sweeteditor"
-        EXCLUDE_FROM_ALL
-    )
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/CMakeLists.txt")
+        add_subdirectory(
+            "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor"
+            "${CMAKE_BINARY_DIR}/sweeteditor"
+            EXCLUDE_FROM_ALL
+        )
+    else ()
+        FetchContent_Declare(
+            sweeteditor_source
+            GIT_REPOSITORY https://github.com/FinalScave/SweetEditor.git
+            GIT_TAG bd4330e70eda5c71b71ecac54cf7312d82d2eae2
+            GIT_SHALLOW FALSE
+            # logging.hpp routes Apple logging through os/log.h, which
+            # hard-errors under GCC, so the patch restricts it to clang.
+            # Nested 3dparty checkouts must carry the same patch (see
+            # 3dparty/patches/).
+            PATCH_COMMAND bash -c "git apply -R --check '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch' 2>/dev/null || git apply '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch'"
+        )
+        FetchContent_MakeAvailable(sweeteditor_source)
+        # The public header includes <sweeteditor/decoration.h>; point
+        # consumers at the fetched copy instead of the empty vendored dir.
+        set(SWEETEDITOR_INCLUDE_DIR "${sweeteditor_source_SOURCE_DIR}/include")
+    endif ()
 endif ()
 
 # SweetLine is intentionally NOT a dependency: highlighting plugs in through
@@ -139,7 +159,7 @@ endif ()
 
 target_include_directories(codeeditor PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/include>"
+        "$<BUILD_INTERFACE:${SWEETEDITOR_INCLUDE_DIR}>"
         "$<INSTALL_INTERFACE:include>"
 )
 
