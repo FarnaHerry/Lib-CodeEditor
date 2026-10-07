@@ -559,7 +559,13 @@ se::GestureEvent ToGestureEvent(const PointerEvent& event) {
   return out;
 }
 
-se::GestureEvent ToWheelGestureEvent(const ScrollInputEvent& event) {
+#if defined(CODEEDITOR_HAS_SCROLL_INPUT_EVENT)
+using CodeEditorScrollEvent = ScrollInputEvent;
+#else
+using CodeEditorScrollEvent = ScrollEvent;
+#endif
+
+se::GestureEvent ToWheelGestureEvent(const CodeEditorScrollEvent& event) {
   se::GestureEvent out;
   out.type = se::EventType::MOUSE_WHEEL;
   out.wheel_delta_x = event.delta_x;
@@ -1858,7 +1864,7 @@ public:
     }
   }
 
-  bool HandleScroll(const ScrollInputEvent& event) {
+  bool HandleScroll(const CodeEditorScrollEvent& event) {
     const se::EditorActionResult result = core_->handleGestureEvent(ToWheelGestureEvent(event));
     if (result.selection_changed || result.cursor_changed) {
       text_input_client_->NotifySelectionChanged();
