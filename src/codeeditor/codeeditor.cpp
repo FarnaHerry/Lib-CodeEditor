@@ -326,7 +326,6 @@ void RegisterSyntaxStyles(se::EditorCore& core, const EditorTheme& theme) {
             ToArgb(theme.syntax_annotation),
             0,
             se::FONT_STYLE_BOLD,
-            1.0f,
         }
     );
   }
@@ -2643,7 +2642,9 @@ private:
       // The split line separates the gutter from the text area (reference
       // renderer draws it when splitLineVisible is set).
       if (model.split_line_visible) {
-        paint.DrawRect(Rect{model.split_x - 1.0F, 0.0F, 1.0F, height}, Argb(0xFFE3E5E8));
+        paint.DrawRect(
+            Rect{model.split_x - 1.0F, 0.0F, 1.0F, height}, theme_.separator_color
+        );
       }
     }
 
@@ -2668,9 +2669,11 @@ private:
       if (line.line_number >= 0) {
         const std::string number = std::to_string(line.line_number);
         const float number_width = char_width_ * static_cast<float>(number.size());
+        const float number_x = line.line_number_position.x +
+                               core_->getLayoutMetrics().line_number_width - number_width;
         paint.DrawTextRun(
-            Rect{line.line_number_position.x, line.line_number_position.y - ascent, number_width, line_height},
-            Point{line.line_number_position.x, line.line_number_position.y},
+            Rect{number_x, line.line_number_position.y - ascent, number_width, line_height},
+            Point{number_x, line.line_number_position.y},
             number,
             line_number_style);
       }
