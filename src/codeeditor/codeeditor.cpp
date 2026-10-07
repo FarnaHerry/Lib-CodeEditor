@@ -564,6 +564,7 @@ using CodeEditorScrollEvent = ScrollInputEvent;
 #else
 using CodeEditorScrollEvent = ScrollEvent;
 #endif
+using CodeEditorScrollHandler = std::function<bool(const CodeEditorScrollEvent&)>;
 
 se::GestureEvent ToWheelGestureEvent(const CodeEditorScrollEvent& event) {
   se::GestureEvent out;
@@ -3690,6 +3691,7 @@ struct EditorBehavior {
   EditorController controller;
   huxerui::EventEmitter events;
   huxerui::State<bool> search_visible;
+  std::shared_ptr<CodeEditorScrollHandler> scroll_handler;
 
   struct Extension final : NodeExtension {
     Extension(ViewNode& node, const EditorBehavior& behavior)
@@ -3707,6 +3709,7 @@ struct EditorBehavior {
           )),
           document_key_(behavior.options.document_key) {
       BindController(behavior.controller);
+      BindScrollHandler(behavior.scroll_handler);
       static_cast<void>(node);
     }
 
@@ -3717,6 +3720,22 @@ struct EditorBehavior {
     // Every controller entry point is bound here and released together, so
     // controller calls after the editor unmounts observe the documented
     // disconnected behavior instead of touching a destroyed extension.
+    void BindScrollHandler(std::shared_ptr<CodeEditorScrollHandler> handler) {
+      if (scroll_handler_ && scroll_handler_ != handler) {
+        *scroll_handler_ = {};
+      }
+      scroll_handler_ = std::move(handler);
+      if (scroll_handler_) {
+        *scroll_handler_ = [this](const CodeEditorScrollEvent& event) {
+          const bool changed = holder_->HandleScroll(event);
+          if (changed) {
+            InvalidatePaint();
+          }
+          return changed;
+        };
+      }
+    }
+
     void BindController(EditorController controller) {
       UnbindController();
       controller_ = std::move(controller);
@@ -3794,6 +3813,7 @@ struct EditorBehavior {
       options_ = behavior.options;
       search_visible_ = behavior.search_visible;
       BindController(behavior.controller);
+      BindScrollHandler(behavior.scroll_handler);
       // Reconcile declarative configuration without resetting the editor:
       // theme, editing/presentation options, hooks, and provider lists apply
       // live; only a document switch or a font change (layout metrics)
@@ -3947,8 +3967,15 @@ struct EditorBehavior {
     huxerui::State<bool> search_visible_;
     std::shared_ptr<EditorHolder> holder_;
     std::string document_key_;
+    std::shared_ptr<CodeEditorScrollHandler> scroll_handler_;
   };
 };
+
+View BindCodeEditorScrollInput(View editor, std::shared_ptr<CodeEditorScrollHandler> handler) {
+  return std::move(editor).On<ViewEvents::ScrollInput>([handler](const ScrollInputEvent& event) {
+    return *handler ? (*handler)(event) : false;
+  });
+}
 
 View EditorSearchBar(
     State<std::string> search_text,
@@ -4041,10 +4068,14 @@ View CodeEditor(EditorOptions options, EditorController controller) {
   // lives on the mounted extension, so it dies with the editor instead of
   // outliving it inside the controller state.
   auto search_visible = UseState(false);
+  auto scroll_handler = std::make_shared<CodeEditorScrollHandler>();
   View editor = Canvas([](PaintContext&, Size) {}).With(
-      EditorBehavior{&measurer, std::move(effective_options), controller, events, search_visible}, Focusable{}
+      EditorBehavior{
+          &measurer, std::move(effective_options), controller, events, search_visible, scroll_handler
+      },
+      Focusable{}
   );
-  return editor;
+  return BindCodeEditorScrollInput(std::move(editor), scroll_handler);
 }
 
 }  // namespace huxerui::codeeditor
