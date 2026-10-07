@@ -171,7 +171,8 @@ add_library(HuxerUI::CodeEditor ALIAS codeeditor)
 # SDK build skips them.
 set(HUXERUI_CODEEDITOR_DEFAULT_TESTS OFF)
 if (NOT HUXERUI_LIBRARY_GRAPH_ONLY AND NOT EMSCRIPTEN AND NOT IOS AND NOT ANDROID
-        AND HUXERUI_HOME AND EXISTS "${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
+        AND HUXERUI_HOME AND TARGET HuxerUI::huxerui_static
+        AND EXISTS "${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
     set(HUXERUI_CODEEDITOR_DEFAULT_TESTS ON)
 endif ()
 option(HUXERUI_CODEEDITOR_BUILD_TESTS "Build CodeEditor component tests" ${HUXERUI_CODEEDITOR_DEFAULT_TESTS})
