@@ -98,14 +98,19 @@ endif ()
 # ShouldCommitFocusOnPointerUp is a newer HuxerUI NodeExtension hook (keeps
 # editor drags and command taps from raising the keyboard) that released SDKs
 # may not ship. Detect it so the component overrides it only when available.
+# ScrollInputEvent likewise exists only in newer SDKs; scan every header so
+# one hook's match cannot hide the other.
 set(HUXERUI_HAS_FOCUS_POINTER_HOOK OFF)
+set(HUXERUI_HAS_SCROLL_INPUT_EVENT OFF)
 if (HUXERUI_HOME AND IS_DIRECTORY "${HUXERUI_HOME}/include/huxerui")
     file(GLOB HUXERUI_PUBLIC_HEADERS "${HUXERUI_HOME}/include/huxerui/*.h")
     foreach (HUXERUI_HEADER ${HUXERUI_PUBLIC_HEADERS})
         file(READ "${HUXERUI_HEADER}" HUXERUI_HEADER_CONTENT)
         if (HUXERUI_HEADER_CONTENT MATCHES "ShouldCommitFocusOnPointerUp")
             set(HUXERUI_HAS_FOCUS_POINTER_HOOK ON)
-            break()
+        endif ()
+        if (HUXERUI_HEADER_CONTENT MATCHES "struct ScrollInputEvent")
+            set(HUXERUI_HAS_SCROLL_INPUT_EVENT ON)
         endif ()
     endforeach ()
 endif ()
@@ -115,6 +120,9 @@ if (HUXERUI_HAS_FOCUS_POINTER_HOOK)
         PRIVATE
             CODEEDITOR_HAS_SHOULD_COMMIT_FOCUS_ON_POINTER_UP
     )
+endif ()
+if (HUXERUI_HAS_SCROLL_INPUT_EVENT)
+    target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SCROLL_INPUT_EVENT)
 endif ()
 
 if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
