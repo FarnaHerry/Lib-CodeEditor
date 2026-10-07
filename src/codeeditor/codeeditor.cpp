@@ -569,8 +569,8 @@ using CodeEditorScrollHandler = std::function<bool(const CodeEditorScrollEvent&)
 se::GestureEvent ToWheelGestureEvent(const CodeEditorScrollEvent& event) {
   se::GestureEvent out;
   out.type = se::EventType::MOUSE_WHEEL;
-  out.wheel_delta_x = event.delta_x;
-  out.wheel_delta_y = event.delta_y;
+  out.wheel_delta_x = -event.delta_x;
+  out.wheel_delta_y = -event.delta_y;
   return out;
 }
 
