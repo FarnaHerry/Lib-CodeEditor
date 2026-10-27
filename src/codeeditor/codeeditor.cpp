@@ -1,6 +1,8 @@
 #include <huxerui/codeeditor.h>
 
-#if defined(__ANDROID__)
+#if !defined(CODEEDITOR_TRACE_ENABLED)
+#define CODEEDITOR_TRACE(...) ((void)0)
+#elif defined(__ANDROID__)
 #include <android/log.h>
 #define CODEEDITOR_TRACE(...) __android_log_print(ANDROID_LOG_INFO, "CodeEditor", __VA_ARGS__)
 #else
@@ -1326,7 +1328,7 @@ public:
       core_->setScrollbarConfig(scrollbar);
     }
 
-    document_ = std::make_shared<se::LineArrayDocument>(se::U8String(options.initial_text));
+    document_ = options.initial_document ? options.initial_document : PrepareEditorDocument(options.initial_text);
     core_->loadDocument(document_);
     // Optional diff presentation against a provided original text (the demo
     // feeds each file's pristine content so edits light up added/removed rows).
@@ -3748,6 +3750,7 @@ struct EditorBehavior {
         document_key_ = key;
         options_.initial_text = text;
         options_.document_key = key;
+        options_.initial_document.reset();
         holder_ =
             std::make_shared<EditorHolder>(*measurer_, options_, [this] { InvalidatePaint(); }, events_, controller_);
         InvalidatePaint();
@@ -4021,6 +4024,10 @@ View EditorSearchBar(
       }),
     }.With(Spacing(4.0F), Padding(4.0F)),
   }.With(CrossAlign(CrossAxisAlignment::Stretch));
+}
+
+EditorDocument PrepareEditorDocument(const std::string& text) {
+  return std::make_shared<se::LineArrayDocument>(text);
 }
 
 // Rejects configuration the editor core cannot honor before any composition

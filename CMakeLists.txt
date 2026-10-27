@@ -107,12 +107,18 @@ huxerui_add_library(codeeditor
             ${LIBRARY_SOURCE_FILES}
 )
 
+option(HUXERUI_CODEEDITOR_TRACE "Enable editor input diagnostics" OFF)
+if (HUXERUI_CODEEDITOR_TRACE)
+    target_compile_definitions(codeeditor PRIVATE CODEEDITOR_TRACE_ENABLED)
+endif ()
+
 # windows.h defines min/max macros (breaking std::min/std::max in the vendored
 # editor headers) and, through rpcndr.h, a `small` macro (breaking theme.h
 # fields such as `float small`). NOMINMAX keeps the std versions intact and
 # WIN32_LEAN_AND_MEAN keeps rpcndr.h out; both match upstream configurations.
 if (WIN32)
-    target_compile_definitions(codeeditor PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    # The public SweetEditor headers require the same macro policy in consumers.
+    target_compile_definitions(codeeditor PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif ()
 
 # ShouldCommitFocusOnPointerUp is a newer HuxerUI NodeExtension hook (keeps
@@ -183,6 +189,7 @@ if (HUXERUI_CODEEDITOR_BUILD_TESTS)
             tests/test_main.cpp
             tests/test_options_validation.cpp
             tests/test_editor_controller.cpp
+            tests/test_editor_document.cpp
             tests/test_editor_theme.cpp
     )
     target_link_libraries(codeeditor_tests

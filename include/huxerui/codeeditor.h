@@ -381,6 +381,12 @@ struct EditorTheme {
 };
 // ---- Options ----
 
+// Build UTF-8 line storage before mounting an editor, including on a worker.
+// Once attached, the document is UI-thread confined; do not mount it in two
+// editors at once or access it concurrently with editing/layout.
+using EditorDocument = std::shared_ptr<sweeteditor::Document>;
+[[nodiscard]] EditorDocument PrepareEditorDocument(const std::string& text);
+
 // Declarative configuration for a CodeEditor instance.
 struct EditorOptions {
   // Initial document content; loaded when the editor is created or when
@@ -389,6 +395,11 @@ struct EditorOptions {
   // Optional document identity. Changing it between recompositions reloads
   // `initial_text` and recreates the editor. Empty keeps one default document.
   std::string document_key;
+  // Optional prebuilt document. Takes precedence over initial_text at mount
+  // or key change, avoiding full-text copies and line parsing on the UI thread.
+  // Retain this handle to preserve edits across unmount/remount. Like
+  // initial_text, changing it under the same key is not a controlled update.
+  EditorDocument initial_document;
 
   float font_size = 14.0F;
   // Optional custom font family. Empty uses the platform monospace font;

@@ -108,6 +108,7 @@ View EditorPage() {
 | `original_text` | Diff baseline update live |
 | `wrap_mode`, `sticky_gutter`, scrollbars | Display settings apply live |
 | `document_key` | **Editor rebuild** — new document, undo/folds reset |
+| `initial_document` | `EditorDocument` | empty | Optional document prepared with `PrepareEditorDocument(text)` on a worker. Takes precedence over `initial_text` at mount/key change. Keep the handle to preserve edits across remounts; after attachment all document access belongs to the UI thread. Never attach one document to simultaneous editors. |
 | `initial_text` (same key) | Ignored — use `LoadDocument()` for programmatic replace |
 
 ### The controller is also UseState

@@ -105,6 +105,7 @@ View EditorPage() {
 | `original_text` | Diff 基准实时更新 |
 | `wrap_mode`、`sticky_gutter`、滚动条 | 显示设置实时应用 |
 | `document_key` | **编辑器重建** — 新文档，撤销/折叠重置 |
+| `initial_document` | `EditorDocument` | 空 | 可在工作线程用 `PrepareEditorDocument(text)` 预构建。挂载或 key 变化时优先于 `initial_text`，避免 UI 线程全文复制和拆行。保留句柄可跨卸载保留编辑；挂载后文档仅归 UI 线程，不可同时挂载到多个编辑器。 |
 | `initial_text`（同 key） | 忽略 — 用 `LoadDocument()` 程序化替换 |
 
 ### Controller 也是 UseState

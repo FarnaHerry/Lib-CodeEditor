@@ -52,6 +52,14 @@ const Application application{
 `document_key` is optional: leave it empty to keep one default document, or set it when switching
 between documents so the editor recreates its document state.
 
+For large files, call `PrepareEditorDocument(text)` on a worker and pass the returned
+handle in `options.initial_document` (instead of copying `initial_text` into UI declarations).
+The editor owns scrolling and viewport rendering. Keep the document handle across remounts
+to retain live edits; once mounted, confine the document to the UI thread and never attach
+one document to multiple mounted editors. `Controller::LoadDocument(key, text)` explicitly
+switches back to the text-loading path. This moves UTF-8 line preparation off the UI thread;
+viewport layout and platform font measurement still happen on the UI thread.
+
 ## Using the library
 
 Consume the library from any HuxerUI application with `huxerui_use_library`:
@@ -122,6 +130,8 @@ Lib-CodeEditor/
 │   └── platform/                  # per-platform shells
 └── 3dparty/SweetEditor/           # editor core (vendored gitlink)
 ```
+
+Input tracing is disabled by default; opt in with `-DHUXERUI_CODEEDITOR_TRACE=ON` when diagnosing input.
 
 ## Building and CI
 
