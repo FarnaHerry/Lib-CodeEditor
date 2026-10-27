@@ -111,6 +111,19 @@ if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
         # consumers at the fetched copy instead of the empty vendored dir.
         set(SWEETEDITOR_INCLUDE_DIR "${sweeteditor_source_SOURCE_DIR}/include")
     endif ()
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # SweetEditor includes <simdutf/simdutf.h>; simdutf's source release
+        # exposes the equivalent header as <simdutf.h>. Reuse the matching
+        # v7.7.0 compatibility headers shipped with SweetEditor.
+        set(_codeeditor_simdutf_compat_include
+            "${SWEETEDITOR_INCLUDE_DIR}/../3dparty/simdutf/include")
+        if (NOT EXISTS "${_codeeditor_simdutf_compat_include}/simdutf/simdutf.h")
+            message(FATAL_ERROR
+                "Missing SweetEditor simdutf compatibility header: ${_codeeditor_simdutf_compat_include}")
+        endif ()
+        target_include_directories(simdutf PUBLIC "${_codeeditor_simdutf_compat_include}")
+    endif ()
 endif ()
 
 # SweetLine is intentionally NOT a dependency: highlighting plugs in through
