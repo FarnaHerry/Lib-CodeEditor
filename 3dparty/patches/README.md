@@ -1,11 +1,12 @@
 # Downstream patches for the vendored editor cores
 
 These patches apply to the nested `3dparty/SweetEditor` and `3dparty/SweetLine`
-checkouts. A fresh clone of this repository has no nested checkouts (the
-gitlinks have no `.gitmodules` entries), and the top-level build then fetches
-SweetEditor through FetchContent, applying `sweeteditor-oslog-gcc.patch`
-automatically. Developers who materialize the nested checkouts by hand must
-apply both patches themselves:
+checkouts. A recursive clone initializes both cores at their recorded gitlink
+revisions through `.gitmodules`; this also lets `huxerui_use_library(URL, COMMIT)`
+acquire the library normally. Source archives and non-recursive clones can still
+use the top-level SweetEditor FetchContent fallback, which applies
+`sweeteditor-oslog-gcc.patch` automatically. Developers using nested checkouts
+must apply both patches themselves:
 
 ```sh
 git -C 3dparty/SweetEditor apply ../patches/sweeteditor-oslog-gcc.patch
