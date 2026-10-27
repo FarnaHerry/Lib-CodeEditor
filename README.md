@@ -145,6 +145,10 @@ The Catch2 suite under `tests/` covers options validation, disconnected controll
 theme derivation. It builds automatically when `HUXERUI_HOME` points at a source HuxerUI checkout
 on a desktop host (the Catch2 amalgamation ships with the checkout); force it with
 `-DHUXERUI_CODEEDITOR_BUILD_TESTS=ON` and run it through `ctest`.
+With `HUXERUI_BUILD_TESTING_LIBRARY=ON`, it also runs headless clipboard and editing-event
+regressions. Toolbar cut/copy/paste use the application clipboard before any native
+shortcut is pressed, return actual success, and honor read-only mode. `TextChanged`
+fires once per content mutation, including clipboard edits and IME commits.
 
 ## Documentation
 

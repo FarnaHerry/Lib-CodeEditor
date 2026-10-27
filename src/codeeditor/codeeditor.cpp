@@ -918,6 +918,7 @@ public:
   bool CanPerformTextEditingAction(TextEditingAction action, PlatformClipboard* clipboard) const override {
     switch (action) {
     case TextEditingAction::Cut:
+      return clipboard != nullptr && !read_only_ && !core_->getSelection().isCollapsed();
     case TextEditingAction::Copy:
       return clipboard != nullptr && !core_->getSelection().isCollapsed();
     case TextEditingAction::Paste:
@@ -939,7 +940,7 @@ public:
     case TextEditingAction::Copy:
     case TextEditingAction::Cut: {
       const se::TextRange selection = core_->getSelection().normalized();
-      if (selection.isCollapsed()) {
+      if (selection.isCollapsed() || (action == TextEditingAction::Cut && read_only_)) {
         return false;
       }
       const std::string text = document_->getU8Text(selection);
@@ -985,20 +986,33 @@ public:
     return false;
   }
 
-  // Context-menu clipboard actions; the clipboard pointer is cached from the
-  // runtime's editing-action calls (the platform adapter outlives the session).
+  // Application toolbars work before any native editing action seeds the
+  // platform clipboard pointer. The public service retires safely with Runtime.
+  void SetApplicationClipboard(std::shared_ptr<Clipboard> clipboard) {
+    application_clipboard_ = std::move(clipboard);
+  }
+
   bool CopySelection() {
-    if (clipboard_ == nullptr || core_->getSelection().isCollapsed()) {
-      return false;
+    if (core_->getSelection().isCollapsed()) return false;
+    const auto text = document_->getU8Text(core_->getSelection().normalized());
+    if (clipboard_ != nullptr) return clipboard_->WriteText(text);
+    return application_clipboard_ && application_clipboard_->WriteText(text);
+  }
+
+  bool CutSelection() {
+    if (read_only_ || !CopySelection()) return false;
+    const auto result = core_->replaceText(core_->getSelection().normalized(), "");
+    if (!result.text_changes.empty()) {
+      NotifyContentChanged(result.text_changes);
+      NotifyEdit();
     }
-    return clipboard_->WriteText(document_->getU8Text(core_->getSelection().normalized()));
+    return result.handled;
   }
 
   bool PasteFromClipboard() {
-    if (clipboard_ == nullptr || read_only_) {
-      return false;
-    }
-    const std::optional<std::string> text = clipboard_->ReadText();
+    if (read_only_) return false;
+    const std::optional<std::string> text = clipboard_ != nullptr ? clipboard_->ReadText()
+        : application_clipboard_ ? application_clipboard_->ReadText() : std::nullopt;
     if (!text.has_value() || text->empty()) {
       return false;
     }
@@ -1214,6 +1228,7 @@ private:
   std::function<bool()> on_tab_;
   std::function<void()> on_diff_edit_;
   bool read_only_;
+  std::shared_ptr<Clipboard> application_clipboard_;
   PlatformClipboard* clipboard_{nullptr};
   TextInputSessionId session_id_ = 0;
   mutable std::uint64_t revision_ = 0;
@@ -1348,8 +1363,11 @@ public:
     text_input_client_ = std::make_shared<EditorTextInputClient>(
         core_, document_,
         [this](const std::vector<se::TextChange>& changes) {
-          RecordPendingChanges(changes);
-          RefreshDecorations(true);
+          if (!changes.empty()) {
+            RecordPendingChanges(changes);
+            RefreshDecorations(true);
+            FireTextChanged();
+          }
         },
         invalidate_,
         [this](const std::vector<se::TextChange>& changes) { UpdateCompletion(changes); },
@@ -1477,7 +1495,6 @@ public:
     if (!result.text_changes.empty()) {
       text_input_client_->NotifyContentChanged(result.text_changes);
       RefreshDecorations(true);
-      FireTextChanged();
     } else if (result.selection_changed || result.cursor_changed || result.scroll_changed) {
       text_input_client_->NotifySelectionChanged();
       RefreshDecorations(true);
@@ -1490,19 +1507,9 @@ public:
 
   // Clipboard/selection actions used by the application toolbars (the editor
   // itself no longer draws a built-in menu).
-  bool CutSelectionAction() {
-    const se::EditorActionResult result = core_->deleteText(core_->getSelection().normalized());
-    AfterCoreAction(result);
-    return result.handled;
-  }
-  bool CopySelectionAction() {
-    text_input_client_->CopySelection();
-    return true;
-  }
-  bool PasteSelectionAction() {
-    text_input_client_->PasteFromClipboard();
-    return true;
-  }
+  bool CutSelectionAction() { return text_input_client_->CutSelection(); }
+  bool CopySelectionAction() { return text_input_client_->CopySelection(); }
+  bool PasteSelectionAction() { return text_input_client_->PasteFromClipboard(); }
   bool SelectAllAction() {
     const se::EditorActionResult result = core_->selectAll();
     AfterCoreAction(result);
@@ -1814,8 +1821,7 @@ public:
           if (!result.text_changes.empty()) {
             text_input_client_->NotifyContentChanged(result.text_changes);
             RefreshDecorations(true);
-            FireTextChanged();
-          }
+                }
           model_dirty_ = true;
           if (invalidate_) {
             invalidate_();
@@ -1845,8 +1851,7 @@ public:
       if (!result.text_changes.empty()) {
         text_input_client_->NotifyContentChanged(result.text_changes);
         RefreshDecorations(true);
-        FireTextChanged();
-        UpdateCompletion(result.text_changes);
+          UpdateCompletion(result.text_changes);
       } else if (result.selection_changed || result.cursor_changed) {
         // Caret moves without text changes dismiss the panel (reference manager
         // dismisses whenever the edit result carries no text changes).
@@ -2405,7 +2410,6 @@ public:
     if (!result.text_changes.empty()) {
       text_input_client_->NotifyContentChanged(result.text_changes);
       RefreshDecorations(true);
-      FireTextChanged();
       UpdateCompletion(result.text_changes);
     } else if (result.selection_changed || result.cursor_changed) {
       text_input_client_->NotifySelectionChanged();
@@ -2441,7 +2445,6 @@ public:
     if (!result.text_changes.empty()) {
       text_input_client_->NotifyContentChanged(result.text_changes);
       RefreshDecorations(true);
-      FireTextChanged();
     }
     model_dirty_ = true;
     if (invalidate_) {
@@ -3051,7 +3054,6 @@ private:
   }
 
   void UpdateCompletion(const std::vector<se::TextChange>& changes) {
-    FireTextChanged();
     if (!completion_provider_) {
       return;
     }
@@ -3697,6 +3699,7 @@ struct EditorBehavior {
   huxerui::EventEmitter events;
   huxerui::State<bool> search_visible;
   std::shared_ptr<CodeEditorScrollHandler> scroll_handler;
+  std::shared_ptr<Clipboard> clipboard;
 
   struct Extension final : NodeExtension {
     Extension(ViewNode& node, const EditorBehavior& behavior)
@@ -3712,7 +3715,8 @@ struct EditorBehavior {
               behavior.events,
               behavior.controller
           )),
-          document_key_(behavior.options.document_key) {
+          document_key_(behavior.options.document_key),
+          clipboard_(behavior.clipboard) {
       BindController(behavior.controller);
       BindScrollHandler(behavior.scroll_handler);
       static_cast<void>(node);
@@ -3743,6 +3747,7 @@ struct EditorBehavior {
 
     void BindController(EditorController controller) {
       UnbindController();
+      holder_->TextInputClient()->SetApplicationClipboard(clipboard_);
       controller_ = std::move(controller);
       auto& state = detail::EditorControllerAccess::State(controller_);
       state->owner = this;
@@ -3753,6 +3758,7 @@ struct EditorBehavior {
         options_.initial_document.reset();
         holder_ =
             std::make_shared<EditorHolder>(*measurer_, options_, [this] { InvalidatePaint(); }, events_, controller_);
+        holder_->TextInputClient()->SetApplicationClipboard(clipboard_);
         InvalidatePaint();
       };
       state->get_text = [this] { return holder_->Text(); };
@@ -3771,18 +3777,15 @@ struct EditorBehavior {
       // Clipboard / selection actions for application toolbars.
       state->cut = [this] {
         if (!holder_) return false;
-        holder_->CutSelectionAction();
-        return true;
+        return holder_->CutSelectionAction();
       };
       state->copy = [this] {
         if (!holder_) return false;
-        holder_->CopySelectionAction();
-        return true;
+        return holder_->CopySelectionAction();
       };
       state->paste = [this] {
         if (!holder_) return false;
-        holder_->PasteSelectionAction();
-        return true;
+        return holder_->PasteSelectionAction();
       };
       state->select_all = [this] {
         if (!holder_) return false;
@@ -3818,6 +3821,7 @@ struct EditorBehavior {
       measurer_ = behavior.measurer;
       options_ = behavior.options;
       search_visible_ = behavior.search_visible;
+      clipboard_ = behavior.clipboard;
       BindController(behavior.controller);
       BindScrollHandler(behavior.scroll_handler);
       // Reconcile declarative configuration without resetting the editor:
@@ -3979,6 +3983,7 @@ struct EditorBehavior {
     std::shared_ptr<EditorHolder> holder_;
     std::string document_key_;
     std::shared_ptr<CodeEditorScrollHandler> scroll_handler_;
+    std::shared_ptr<Clipboard> clipboard_;
   };
 };
 
@@ -4086,7 +4091,8 @@ View CodeEditor(EditorOptions options, EditorController controller) {
   auto scroll_handler = std::make_shared<CodeEditorScrollHandler>();
   View editor = Canvas([](PaintContext&, Size) {}).With(
       EditorBehavior{
-          &measurer, std::move(effective_options), controller, events, search_visible, scroll_handler
+          &measurer, std::move(effective_options), controller, events, search_visible, scroll_handler,
+          UseApplication().Clipboard()
       },
       Focusable{}
   );

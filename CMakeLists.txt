@@ -198,5 +198,9 @@ if (HUXERUI_CODEEDITOR_BUILD_TESTS)
                 HuxerUI::huxerui_static
                 huxerui_3p_catch2
     )
+    if (TARGET HuxerUI::testing)
+        target_sources(codeeditor_tests PRIVATE tests/test_editor_runtime.cpp)
+        target_link_libraries(codeeditor_tests PRIVATE HuxerUI::testing)
+    endif ()
     add_test(NAME codeeditor_tests COMMAND codeeditor_tests)
 endif ()
