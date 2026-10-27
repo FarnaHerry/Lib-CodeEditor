@@ -63,6 +63,31 @@ if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     set(SWEETEDITOR_BUILD_APPLE_FRAMEWORK OFF CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_WASM_C_ABI OFF CACHE BOOL "" FORCE)
     set(SWEETEDITOR_BUILD_WASM_EMBIND OFF CACHE BOOL "" FORCE)
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The bundled Linux simdutf archive was built with a newer libstdc++
+        # than our libc++ toolchain's runtime contract. Build the matching
+        # v7.7.0 source with the consumer toolchain, then let SweetEditor merge
+        # that archive into its static library as it does on other platforms.
+        set(SIMDUTF_TESTS OFF CACHE BOOL "" FORCE)
+        set(SIMDUTF_TOOLS OFF CACHE BOOL "" FORCE)
+        set(SIMDUTF_BENCHMARKS OFF CACHE BOOL "" FORCE)
+        set(SIMDUTF_FUZZERS OFF CACHE BOOL "" FORCE)
+        set(_codeeditor_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+        set(BUILD_SHARED_LIBS OFF)
+        FetchContent_Declare(codeeditor_simdutf_source
+            GIT_REPOSITORY https://github.com/simdutf/simdutf.git
+            GIT_TAG 94fb52ea0219cb37092d8ae294b4702bacf5d8df
+            GIT_SHALLOW FALSE
+        )
+        FetchContent_MakeAvailable(codeeditor_simdutf_source)
+        set(BUILD_SHARED_LIBS "${_codeeditor_saved_build_shared_libs}")
+        if (NOT TARGET simdutf)
+            message(FATAL_ERROR "Pinned simdutf source did not define target simdutf")
+        endif ()
+        add_library(SweetEditor3p::Simdutf ALIAS simdutf)
+    endif ()
+
     if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/CMakeLists.txt")
         add_subdirectory(
             "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor"
@@ -166,6 +191,20 @@ if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     if (ANDROID)
         # android/log.h diagnostics for on-device tracing.
         target_link_libraries(codeeditor PRIVATE log)
+    endif ()
+
+    # SweetEditor merges simdutf's static archive into sweeteditor_static at
+    # post-build time. Its original private link edge is then redundant, and
+    # the iOS link-manifest generator cannot resolve that nested imported
+    # target in the app graph. Preserve all other system/header dependencies.
+    if (TARGET sweeteditor_static AND TARGET SweetEditor3p::Simdutf)
+        foreach (_property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+            get_property(_links TARGET sweeteditor_static PROPERTY "${_property}")
+            if (_links)
+                list(FILTER _links EXCLUDE REGEX "SweetEditor3p::Simdutf")
+                set_property(TARGET sweeteditor_static PROPERTY "${_property}" "${_links}")
+            endif ()
+        endforeach ()
     endif ()
 endif ()
 
