@@ -122,7 +122,8 @@ if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
             message(FATAL_ERROR
                 "Missing SweetEditor simdutf compatibility header: ${_codeeditor_simdutf_compat_include}")
         endif ()
-        target_include_directories(simdutf PUBLIC "${_codeeditor_simdutf_compat_include}")
+        target_include_directories(simdutf INTERFACE
+            "$<BUILD_INTERFACE:${_codeeditor_simdutf_compat_include}>")
     endif ()
 endif ()
 
