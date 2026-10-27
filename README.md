@@ -63,6 +63,7 @@ viewport layout and platform font measurement still happen on the UI thread.
 ## Using the library
 
 Consume the library from any HuxerUI application with `huxerui_use_library`:
+Android library-graph discovery registers the component without applying native build properties to its interface target.
 
 ```cmake
 # In your app's CMakeLists.txt, after huxerui_add_app(...):

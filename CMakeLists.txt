@@ -106,6 +106,12 @@ huxerui_add_library(codeeditor
         SOURCES
             ${LIBRARY_SOURCE_FILES}
 )
+add_library(HuxerUI::CodeEditor ALIAS codeeditor)
+
+# Graph discovery creates an INTERFACE target and performs no native build.
+if (HUXERUI_LIBRARY_GRAPH_ONLY)
+    return()
+endif ()
 
 option(HUXERUI_CODEEDITOR_TRACE "Enable editor input diagnostics" OFF)
 if (HUXERUI_CODEEDITOR_TRACE)
@@ -168,8 +174,6 @@ target_include_directories(codeeditor PUBLIC
         "$<BUILD_INTERFACE:${SWEETEDITOR_INCLUDE_DIR}>"
         "$<INSTALL_INTERFACE:include>"
 )
-
-add_library(HuxerUI::CodeEditor ALIAS codeeditor)
 
 # Component tests exercise pure public-API logic (options validation,
 # disconnected controller behavior, theme derivation). They require the
