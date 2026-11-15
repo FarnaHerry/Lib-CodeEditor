@@ -71,3 +71,26 @@ TEST_CASE("ReadOnlyToolbarRejectsCutAndPasteWithoutChangingDocument") {
   REQUIRE(controller.Text() == "read-only");
   REQUIRE(changes == 0);
 }
+
+TEST_CASE("ClipboardShortcutsEditTheFocusedDocument") {
+  document = PrepareEditorDocument("shortcut text");
+  controller = EditorController{};
+  read_only = false;
+  changes = 0;
+  testing::UiTest ui(application, {.viewport = {400, 300}});
+  ui.Pump();
+  ui.Find(testing::UiSelector::Key("runtime-editor"))
+      .Find(testing::UiSelector::Type<Canvas>()).Tap();
+
+  const KeyModifiers control{.control = true};
+  ui.PressKey(Key::A, control);
+  ui.PressKey(Key::C, control);
+  REQUIRE(clipboard->ReadText() == std::optional<std::string>{"shortcut text"});
+  REQUIRE(changes == 0);
+  ui.PressKey(Key::X, control);
+  REQUIRE(controller.Text().empty());
+  REQUIRE(changes == 1);
+  ui.PressKey(Key::V, control);
+  REQUIRE(controller.Text() == "shortcut text");
+  REQUIRE(changes == 2);
+}

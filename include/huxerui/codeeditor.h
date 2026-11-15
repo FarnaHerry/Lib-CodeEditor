@@ -17,6 +17,7 @@
 #include <huxerui/color.h>
 #include <huxerui/event.h>
 #include <huxerui/state.h>
+#include <huxerui/text.h>
 #include <huxerui/theme.h>
 #include <huxerui/view.h>
 
@@ -469,6 +470,10 @@ struct EditorOptions {
   // the gutter icons and fold arrows). Lower values tighten the gutter
   // against the content. Applied when the editor is created.
   float line_number_margin = 5.0F;
+
+  // Optional content font, including fonts loaded from resources. Overrides
+  // font_family and is rendered at font_size.
+  std::optional<huxerui::Font> font;
 };
 
 // A HuxerUI code editor component backed by the SweetEditor core.

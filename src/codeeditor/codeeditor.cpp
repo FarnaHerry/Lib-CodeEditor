@@ -404,27 +404,29 @@ TextStyle MakeTextStyle(int32_t font_style, int32_t argb_color, float font_size)
 }
 
 // ---- SweetEditor TextMeasurer bridge ---------------------------------------
+Font ResolveContentFont(const EditorOptions& options) {
+  if (options.font) {
+    return options.font->WithSize(options.font_size);
+  }
+  return options.font_family.empty() ? Font::Monospace(options.font_size)
+                                     : Font::Named(options.font_family, options.font_size);
+}
+
 class HuxeruiTextMeasurer final : public se::TextMeasurer {
 public:
-  explicit HuxeruiTextMeasurer(huxerui::TextMeasurer& measurer, float font_size, std::string font_family)
-      : measurer_(&measurer), font_size_(font_size), font_family_(std::move(font_family)) {}
+  explicit HuxeruiTextMeasurer(huxerui::TextMeasurer& measurer, Font font)
+      : measurer_(&measurer), font_(std::move(font)) {}
 
-  [[nodiscard]] huxerui::Font ContentFont() const {
-    return font_family_.empty() ? huxerui::Font::Monospace(font_size_)
-                                : huxerui::Font::Named(font_family_, font_size_);
-  }
-
-  void SetFont(std::string font_family, float font_size) {
-    font_family_ = std::move(font_family);
-    font_size_ = font_size;
+  void SetFont(Font font) {
+    font_ = std::move(font);
   }
 
   float measureWidth(const se::U16String& text, int32_t font_style) override {
     if (!measurer_) {
       return 0.0F;
     }
-    huxerui::TextStyle style = MakeTextStyle(font_style, 0, font_size_);
-    style.font = ContentFont();
+    huxerui::TextStyle style = MakeTextStyle(font_style, 0, font_.Size());
+    style.font = font_;
     return measurer_->MeasureRun(Utf16ToUtf8(text), style).advance;
   }
 
@@ -433,7 +435,7 @@ public:
       return 0.0F;
     }
     // SweetEditor's reference renderer draws inlay hints in a sans-serif face at 90% of the text size.
-    const huxerui::Font hint_font = huxerui::Font::System(font_size_ * 0.9F);
+    const huxerui::Font hint_font = huxerui::Font::System(font_.Size() * 0.9F);
     return measurer_
         ->MeasureRun(
             Utf16ToUtf8(text), huxerui::TextStyle{hint_font, huxerui::Color::Black(), huxerui::TextDecoration::None}
@@ -449,14 +451,13 @@ public:
     if (!measurer_) {
       return {0.0F, 0.0F};
     }
-    const huxerui::FontMetrics metrics = measurer_->Metrics(ContentFont());
+    const huxerui::FontMetrics metrics = measurer_->Metrics(font_);
     return {-metrics.ascent, metrics.descent};
   }
 
 private:
-  std::string font_family_;
   huxerui::TextMeasurer* measurer_;
-  float font_size_;
+  Font font_;
 };
 
 // ---- Input mapping ---------------------------------------------------------
@@ -915,27 +916,43 @@ public:
     return TextInputKeyResult::Unhandled;
   }
 
-  bool CanPerformTextEditingAction(TextEditingAction action, PlatformClipboard* clipboard) const override {
+  bool CanEditSelection(TextEditingAction action, bool clipboard_available) const {
     switch (action) {
     case TextEditingAction::Cut:
-      return clipboard != nullptr && !read_only_ && !core_->getSelection().isCollapsed();
+      return clipboard_available && !read_only_ && !core_->getSelection().isCollapsed();
     case TextEditingAction::Copy:
-      return clipboard != nullptr && !core_->getSelection().isCollapsed();
+      return clipboard_available && !core_->getSelection().isCollapsed();
     case TextEditingAction::Paste:
-      return clipboard != nullptr && !read_only_;
+      return clipboard_available && !read_only_;
     case TextEditingAction::SelectAll:
       return true;
     }
     return false;
   }
 
+#if defined(CODEEDITOR_HAS_TEXT_EDITING_ACTION_STATUS)
+  TextEditingActionStatus GetTextEditingActionStatus(TextEditingAction action, const Clipboard& clipboard) const override {
+    if (action != TextEditingAction::SelectAll && !clipboard.SupportsSynchronousText()) {
+      return TextEditingActionStatus::UseDefault;
+    }
+    return CanEditSelection(action, true) ? TextEditingActionStatus::Handle : TextEditingActionStatus::Disabled;
+  }
+
+  void PerformTextEditingAction(TextEditingAction action, const Clipboard& clipboard) override {
+    ApplyEditingAction(action, clipboard);
+  }
+#else
+  bool CanPerformTextEditingAction(TextEditingAction action, PlatformClipboard* clipboard) const override {
+    return CanEditSelection(action, clipboard != nullptr);
+  }
+
   bool PerformTextEditingAction(TextEditingAction action, PlatformClipboard* clipboard) override {
-    if (clipboard != nullptr) {
-      clipboard_ = clipboard;
-    }
-    if (clipboard == nullptr) {
-      return false;
-    }
+    return clipboard != nullptr && ApplyEditingAction(action, *clipboard);
+  }
+#endif
+
+  template <class ClipboardType>
+  bool ApplyEditingAction(TextEditingAction action, ClipboardType& clipboard) {
     switch (action) {
     case TextEditingAction::Copy:
     case TextEditingAction::Cut: {
@@ -944,7 +961,7 @@ public:
         return false;
       }
       const std::string text = document_->getU8Text(selection);
-      if (!clipboard->WriteText(text)) {
+      if (!clipboard.WriteText(text)) {
         return false;
       }
       if (action == TextEditingAction::Cut) {
@@ -963,7 +980,7 @@ public:
       if (read_only_) {
         return false;
       }
-      const std::optional<std::string> text = clipboard->ReadText();
+      const std::optional<std::string> text = clipboard.ReadText();
       if (!text.has_value() || text->empty()) {
         return false;
       }
@@ -986,8 +1003,6 @@ public:
     return false;
   }
 
-  // Application toolbars work before any native editing action seeds the
-  // platform clipboard pointer. The public service retires safely with Runtime.
   void SetApplicationClipboard(std::shared_ptr<Clipboard> clipboard) {
     application_clipboard_ = std::move(clipboard);
   }
@@ -995,7 +1010,6 @@ public:
   bool CopySelection() {
     if (core_->getSelection().isCollapsed()) return false;
     const auto text = document_->getU8Text(core_->getSelection().normalized());
-    if (clipboard_ != nullptr) return clipboard_->WriteText(text);
     return application_clipboard_ && application_clipboard_->WriteText(text);
   }
 
@@ -1011,8 +1025,7 @@ public:
 
   bool PasteFromClipboard() {
     if (read_only_) return false;
-    const std::optional<std::string> text = clipboard_ != nullptr ? clipboard_->ReadText()
-        : application_clipboard_ ? application_clipboard_->ReadText() : std::nullopt;
+    const auto text = application_clipboard_ ? application_clipboard_->ReadText() : std::nullopt;
     if (!text.has_value() || text->empty()) {
       return false;
     }
@@ -1140,7 +1153,8 @@ private:
     };
     switch (command.kind) {
     case TextInputCommandKind::CommitText:
-      if (!command.text.empty()) {
+      // The legacy HuxerUI cut action commits empty text over the selection.
+      if (!command.text.empty() || !core_->getSelection().isCollapsed()) {
         capture(core_->insertText(command.text));
         return true;
       }
@@ -1229,7 +1243,6 @@ private:
   std::function<void()> on_diff_edit_;
   bool read_only_;
   std::shared_ptr<Clipboard> application_clipboard_;
-  PlatformClipboard* clipboard_{nullptr};
   TextInputSessionId session_id_ = 0;
   mutable std::uint64_t revision_ = 0;
   mutable std::uint64_t content_revision_ = 0;
@@ -1258,9 +1271,8 @@ public:
       EditorController controller
   )
       : theme_(options.theme.value_or(EditorTheme::Default())),
-        font_family_(options.font_family),
+        font_(ResolveContentFont(options)),
         invalidate_(std::move(invalidate)),
-        font_size_(options.font_size),
         completion_provider_(options.completion_provider),
         completion_trigger_characters_(options.completion_trigger_characters),
         controller_(std::move(controller)),
@@ -1278,7 +1290,7 @@ public:
 
     se::EditorOptions core_options;
     measurer_ = &measurer;
-    text_measurer_ = std::make_shared<HuxeruiTextMeasurer>(measurer, font_size_, font_family_);
+    text_measurer_ = std::make_shared<HuxeruiTextMeasurer>(measurer, content_font);
     core_ = std::make_shared<se::EditorCore>(text_measurer_, core_options);
     theme_ = options.theme.value_or(EditorTheme::Default());
     core_->setEditorRenderColors(MakeRenderColors(theme_));
@@ -1940,28 +1952,19 @@ public:
     return theme_;
   }
 
-  [[nodiscard]] float FontSize() const noexcept {
-    return font_size_;
-  }
-
-  [[nodiscard]] const std::string& FontFamily() const noexcept {
-    return font_family_;
-  }
-
   // Applies a content font change without resetting the editor: the measurer
   // bridge retargets and the core's onFontMetricsChanged recomputes layout
   // while preserving the caret, scroll anchor, undo stack, and folds.
-  void ApplyFont(std::string font_family, float font_size) {
-    if (font_family == font_family_ && font_size == font_size_) {
+  void ApplyFont(Font font) {
+    if (font == font_) {
       return;
     }
-    font_family_ = std::move(font_family);
-    font_size_ = font_size;
+    font_ = std::move(font);
     const Font content_font = ContentFont();
     font_metrics_ = measurer_->Metrics(content_font);
     char_width_ = measurer_->MeasureRun("0", TextStyle{content_font, Color::Black(), TextDecoration::None}).advance;
     if (text_measurer_) {
-      text_measurer_->SetFont(font_family_, EffectiveFontSize());
+      text_measurer_->SetFont(content_font);
       core_->onFontMetricsChanged();
     }
     model_dirty_ = true;
@@ -1974,13 +1977,12 @@ public:
   // tracks the scale in its view state; the platform applies it to rendering
   // by feeding the scaled size back through the measurer and paint fonts.
   [[nodiscard]] float EffectiveFontSize() const {
-    return font_size_ * display_scale_;
+    return font_.Size() * display_scale_;
   }
 
   // The content font: the platform monospace default or the configured family.
   [[nodiscard]] Font ContentFont() const {
-    return font_family_.empty() ? Font::Monospace(EffectiveFontSize())
-                                : Font::Named(font_family_, EffectiveFontSize());
+    return font_.WithSize(EffectiveFontSize());
   }
 
   // Applies the core's current display scale (reported through scale_changed
@@ -1995,7 +1997,7 @@ public:
     font_metrics_ = measurer_->Metrics(content_font);
     char_width_ = measurer_->MeasureRun("0", TextStyle{content_font, Color::Black(), TextDecoration::None}).advance;
     if (text_measurer_) {
-      text_measurer_->SetFont(font_family_, EffectiveFontSize());
+      text_measurer_->SetFont(content_font);
       core_->onFontMetricsChanged();
     }
     model_dirty_ = true;
@@ -2854,7 +2856,7 @@ private:
     // Text measurement/layout still uses one uniform font, so styles must
     // not resize the painted font (the caret geometry would drift). Heading
     // hierarchy stays visual (bold + color) until per-line measurement lands.
-    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_size_);
+    TextStyle style = MakeTextStyle(run.style.font_style, run.style.color, font_.Size());
     style.font = ContentFont();
     paint.DrawTextRun(Rect{run.x, top, run.width, height}, Point{run.x, run.y}, text, style);
   }
@@ -2869,7 +2871,7 @@ private:
     paint.DrawRect(background, theme_.inlay_hint_background, CornerRadii(height * 0.2F));
     if (!run.text.empty()) {
       const float text_x = run.x + margin + run.padding;
-      const TextStyle style{Font::System(font_size_ * 0.9F), theme_.inlay_hint_text, TextDecoration::None};
+      const TextStyle style{Font::System(font_.Size() * 0.9F), theme_.inlay_hint_text, TextDecoration::None};
       paint.DrawTextRun(Rect{text_x, top, run.width, height}, Point{text_x, run.y}, Utf16ToUtf8(run.text), style);
     }
   }
@@ -3460,7 +3462,7 @@ private:
   std::shared_ptr<HuxeruiTextMeasurer> text_measurer_;
   huxerui::TextMeasurer* measurer_ = nullptr;
   EditorTheme theme_;
-  std::string font_family_;
+  Font font_;
   float display_scale_{1.0F};
   // Set when document content changed since the last fold publication; the
   // next settled refresh re-applies fold regions (possibly empty to clear).
@@ -3475,7 +3477,6 @@ private:
   se::Size viewport_;
   se::IntRange last_visible_range_{0, -1};
   FontMetrics font_metrics_;
-  float font_size_;
   float char_width_;
   CompletionProvider completion_provider_;
   std::function<bool(const std::string&)> completion_trigger_characters_;
@@ -3829,7 +3830,7 @@ struct EditorBehavior {
       // live; only a document switch or a font change (layout metrics)
       // justifies rebuilding the holder.
       holder_->ApplyTheme(behavior.options.theme.value_or(holder_->Theme()));
-      holder_->ApplyFont(behavior.options.font_family, behavior.options.font_size);
+      holder_->ApplyFont(ResolveContentFont(behavior.options));
       if (behavior.options.document_key != document_key_) {
         document_key_ = behavior.options.document_key;
         holder_ = std::make_shared<EditorHolder>(

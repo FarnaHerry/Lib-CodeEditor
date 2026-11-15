@@ -384,9 +384,6 @@ View EditorStatusBar(State<std::string> cursor_status, State<std::string> select
   }.With(Spacing(16.0F), Padding(8.0F));
 }
 
-// Ordinary helper: called during composition, so UseRawResource inside it
-// attaches to the caller's active scope. No composable attribute — it returns
-// an options value, not a View.
 huxerui::codeeditor::EditorOptions MakeEditorOptions(
     const DemoDocument& document,
     bool diff_enabled,
@@ -394,9 +391,6 @@ huxerui::codeeditor::EditorOptions MakeEditorOptions(
     bool wrap_enabled,
     bool sticky_enabled,
     bool dark_theme,
-    const std::string& maple_family,
-    const std::string& maple_nl_family,
-    bool ligature,
     State<std::vector<uint32_t>> breakpoints
 ) {
   huxerui::codeeditor::EditorOptions options;
@@ -437,14 +431,6 @@ huxerui::codeeditor::EditorOptions MakeEditorOptions(
   if (dark_theme) {
     options.theme = MakeDarkTheme();
   }
-  // Maple Mono resolves through the process font registry (registered from
-  // the raw resources by the caller). Two physical font files: the standard
-  // build carries the ligature features in calt; the NL build has calt
-  // stripped at the GSUB level, which is more reliable than runtime
-  // font-feature settings.
-  if (!maple_family.empty()) {
-    options.font_family = ligature ? maple_family : maple_nl_family;
-  }
   options.original_text = diff_enabled ? diff_original : std::string();
   options.wrap_mode = wrap_enabled ? 2 : 0;
   options.sticky_gutter = sticky_enabled;
@@ -473,27 +459,18 @@ View EditorDemo() {
   const RawAsset kotlin_file = UseRawResource(RawResource("app", "raw/files/example.kt"));
   const RawAsset lua_file = UseRawResource(RawResource("app", "raw/files/example.lua"));
   const RawAsset gc_file = UseRawResource(RawResource("app", "raw/files/gc.cpp"));
-  // Maple Mono ships in the raw resources and registers into the process font
-  // registry through Font::FromRawAsset, so Font::Named-style family requests
-  // resolve it on every platform. Two physical font files: the standard build
-  // carries the ligature features in calt; the NL build has calt stripped at
-  // the GSUB level, which is more reliable than runtime font-feature settings.
-  std::string maple_family;
-  std::string maple_nl_family;
-  if (maple_font.Get()) {
-    maple_family = Font::FromRawAsset(UseRawResource(RawResource("app", "raw/fonts/MapleMono.ttf")), 14.0F)
-                       .FamilyName();
-    maple_nl_family = Font::FromRawAsset(UseRawResource(RawResource("app", "raw/fonts/MapleMonoNL.ttf")), 14.0F)
-                          .FamilyName();
-  }
   const auto documents = LoadDemoDocuments(
       cpp_syntax, java_syntax, kotlin_syntax, lua_syntax, java_file, kotlin_file, lua_file, gc_file);
   const ToastHandle toast = UseToast();
   const huxerui::codeeditor::EditorController controller = huxerui::codeeditor::UseEditorController();
   const DemoDocument& document = documents[current_file.Get()];
-  const auto options = MakeEditorOptions(
+  auto options = MakeEditorOptions(
       document, diff_enabled.Get(), diff_original.Get(), wrap_enabled.Get(), sticky_enabled.Get(), dark_theme.Get(),
-      maple_family, maple_nl_family, ligature.Get(), breakpoints);
+      breakpoints);
+  if (maple_font.Get()) {
+    const char* font_path = ligature.Get() ? "raw/fonts/MapleMono.ttf" : "raw/fonts/MapleMonoNL.ttf";
+    options.font = Font::FromResource(RawResource("app", font_path));
+  }
 
   return Column {
     DemoFileSelector(documents, current_file.Get())

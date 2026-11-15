@@ -166,35 +166,26 @@ if (WIN32)
     target_compile_definitions(codeeditor PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif ()
 
-# ShouldCommitFocusOnPointerUp is a newer HuxerUI NodeExtension hook (keeps
-# editor drags and command taps from raising the keyboard) that released SDKs
-# may not ship. Detect it so the component overrides it only when available.
-# ScrollInputEvent likewise exists only in newer SDKs; scan every header so
-# one hook's match cannot hide the other.
-set(HUXERUI_HAS_FOCUS_POINTER_HOOK OFF)
-set(HUXERUI_HAS_SCROLL_INPUT_EVENT OFF)
-if (HUXERUI_HOME AND IS_DIRECTORY "${HUXERUI_HOME}/include/huxerui")
-    file(GLOB HUXERUI_PUBLIC_HEADERS "${HUXERUI_HOME}/include/huxerui/*.h")
+# Detect optional APIs in the headers of the linked framework target.
+get_target_property(HUXERUI_INCLUDE_DIRECTORIES HuxerUI::huxerui INTERFACE_INCLUDE_DIRECTORIES)
+foreach (HUXERUI_INCLUDE_DIRECTORY IN LISTS HUXERUI_INCLUDE_DIRECTORIES)
+    string(REGEX REPLACE "^\\$<BUILD_INTERFACE:(.*)>$" "\\1"
+            HUXERUI_INCLUDE_DIRECTORY "${HUXERUI_INCLUDE_DIRECTORY}")
+    file(GLOB HUXERUI_PUBLIC_HEADERS "${HUXERUI_INCLUDE_DIRECTORY}/huxerui/*.h")
     foreach (HUXERUI_HEADER ${HUXERUI_PUBLIC_HEADERS})
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${HUXERUI_HEADER}")
         file(READ "${HUXERUI_HEADER}" HUXERUI_HEADER_CONTENT)
         if (HUXERUI_HEADER_CONTENT MATCHES "ShouldCommitFocusOnPointerUp")
-            set(HUXERUI_HAS_FOCUS_POINTER_HOOK ON)
+            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SHOULD_COMMIT_FOCUS_ON_POINTER_UP)
         endif ()
         if (HUXERUI_HEADER_CONTENT MATCHES "struct ScrollInputEvent")
-            set(HUXERUI_HAS_SCROLL_INPUT_EVENT ON)
+            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SCROLL_INPUT_EVENT)
+        endif ()
+        if (HUXERUI_HEADER_CONTENT MATCHES "enum class TextEditingActionStatus")
+            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_TEXT_EDITING_ACTION_STATUS)
         endif ()
     endforeach ()
-endif ()
-if (HUXERUI_HAS_FOCUS_POINTER_HOOK)
-    target_compile_definitions(
-        codeeditor
-        PRIVATE
-            CODEEDITOR_HAS_SHOULD_COMMIT_FOCUS_ON_POINTER_UP
-    )
-endif ()
-if (HUXERUI_HAS_SCROLL_INPUT_EVENT)
-    target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SCROLL_INPUT_EVENT)
-endif ()
+endforeach ()
 
 if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
     target_link_libraries(
