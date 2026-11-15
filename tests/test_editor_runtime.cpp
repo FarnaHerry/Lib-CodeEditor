@@ -9,7 +9,7 @@
 namespace {
 using namespace huxerui;
 using namespace huxerui::codeeditor;
-EditorDocument document;
+Document document;
 EditorController controller;
 std::shared_ptr<Clipboard> clipboard;
 bool read_only = false;
@@ -19,10 +19,10 @@ View Root() {
   return MaterialTheme(Scope([] {
     clipboard = UseApplication().Clipboard();
     EditorOptions options;
-    options.initial_document = document;
-    options.read_only = read_only;
-    return CodeEditor(std::move(options), controller)
-        .On<EditorEvents::TextChanged>([] { ++changes; })
+    options.document = document;
+    options.settings.read_only = read_only;
+    return CodeEditor(controller, std::move(options))
+        .On<EditorEvents::TextChanged>([](const TextChangedEvent&) { ++changes; })
         .With(Grow{})
         .Key("runtime-editor");
   }));
@@ -31,23 +31,23 @@ const Application application{Root};
 }
 
 TEST_CASE("ToolbarClipboardActionsWorkBeforeNativeClipboardCommands") {
-  document = PrepareEditorDocument("original\r\nline\n");
+  document = Document("original\r\nline\n");
   controller = EditorController{};
   read_only = false;
   changes = 0;
   testing::UiTest ui(application, {.viewport = {400, 300}});
   ui.Pump();
   REQUIRE(controller.SelectAll());
-  REQUIRE(controller.Copy());
+  REQUIRE(controller.CopyToClipboard());
   REQUIRE(clipboard->ReadText() == std::optional<std::string>{"original\r\nline\n"});
   REQUIRE(changes == 0);
-  REQUIRE(controller.Cut());
-  REQUIRE(controller.Text().empty());
+  REQUIRE(controller.CutToClipboard());
+  REQUIRE(document.GetText().empty());
   REQUIRE(changes == 1);
   REQUIRE(clipboard->ReadText() == std::optional<std::string>{"original\r\nline\n"});
   REQUIRE(clipboard->WriteText("pasted"));
-  REQUIRE(controller.Paste());
-  REQUIRE(controller.Text() == "pasted");
+  REQUIRE(controller.PasteFromClipboard());
+  REQUIRE(document.GetText() == "pasted");
   REQUIRE(changes == 2);
   const auto editor = ui.Find(testing::UiSelector::Key("runtime-editor"))
       .Find(testing::UiSelector::Type<Canvas>());
@@ -57,23 +57,23 @@ TEST_CASE("ToolbarClipboardActionsWorkBeforeNativeClipboardCommands") {
 }
 
 TEST_CASE("ReadOnlyToolbarRejectsCutAndPasteWithoutChangingDocument") {
-  document = PrepareEditorDocument("read-only");
+  document = Document("read-only");
   controller = EditorController{};
   read_only = true;
   changes = 0;
   testing::UiTest ui(application, {.viewport = {400, 300}});
   ui.Pump();
   REQUIRE(controller.SelectAll());
-  REQUIRE(controller.Copy());
+  REQUIRE(controller.CopyToClipboard());
   REQUIRE(clipboard->ReadText() == std::optional<std::string>{"read-only"});
-  REQUIRE_FALSE(controller.Cut());
-  REQUIRE_FALSE(controller.Paste());
-  REQUIRE(controller.Text() == "read-only");
+  REQUIRE_FALSE(controller.CutToClipboard());
+  REQUIRE_FALSE(controller.PasteFromClipboard());
+  REQUIRE(document.GetText() == "read-only");
   REQUIRE(changes == 0);
 }
 
 TEST_CASE("ClipboardShortcutsEditTheFocusedDocument") {
-  document = PrepareEditorDocument("shortcut text");
+  document = Document("shortcut text");
   controller = EditorController{};
   read_only = false;
   changes = 0;
@@ -88,9 +88,9 @@ TEST_CASE("ClipboardShortcutsEditTheFocusedDocument") {
   REQUIRE(clipboard->ReadText() == std::optional<std::string>{"shortcut text"});
   REQUIRE(changes == 0);
   ui.PressKey(Key::X, control);
-  REQUIRE(controller.Text().empty());
+  REQUIRE(document.GetText().empty());
   REQUIRE(changes == 1);
   ui.PressKey(Key::V, control);
-  REQUIRE(controller.Text() == "shortcut text");
+  REQUIRE(document.GetText() == "shortcut text");
   REQUIRE(changes == 2);
 }

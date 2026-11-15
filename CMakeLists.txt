@@ -1,135 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
 
-if (HUXERUI_PROJECT_PLAN_OUTPUT)
-    get_filename_component(HUXERUI_PROJECT_PLAN_DIRECTORY
-            "${HUXERUI_PROJECT_PLAN_OUTPUT}"
-            DIRECTORY
-    )
-    file(MAKE_DIRECTORY "${HUXERUI_PROJECT_PLAN_DIRECTORY}")
-    file(WRITE "${HUXERUI_PROJECT_PLAN_OUTPUT}" [=[
-{
-  "schema": 1,
-  "kind": "library",
-  "name": "codeeditor",
-  "id": "com.example.codeeditor",
-  "target": "codeeditor"
-}
-]=])
-endif ()
-if (HUXERUI_PROJECT_PLAN_ONLY)
-    return()
+# Set the deployment target before CMake initializes the Apple toolchain.
+if (CMAKE_HOST_APPLE AND (NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        AND NOT CMAKE_TOOLCHAIN_FILE AND "$ENV{CMAKE_TOOLCHAIN_FILE}" STREQUAL ""
+        AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND "$ENV{MACOSX_DEPLOYMENT_TARGET}" STREQUAL "")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment target")
 endif ()
 
 project(codeeditor VERSION 0.1.0 LANGUAGES NONE)
 
-enable_language(CXX)
-
-if (NOT TARGET HuxerUI::huxerui)
-    set(HUXERUI_HOME "$ENV{HUXERUI_HOME}" CACHE PATH "HuxerUI SDK or source directory")
-    set(HUXERUI_HOST_TOOL_ROOT "$ENV{HUXERUI_HOST_TOOL_ROOT}" CACHE PATH "HuxerUI host tool root")
-    if (HUXERUI_HOME AND EXISTS "${HUXERUI_HOME}/CMakeLists.txt"
-            AND EXISTS "${HUXERUI_HOME}/include/huxerui/huxerui.h")
-        set(HUXERUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(HUXERUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        if (ANDROID)
-            set(HUXERUI_BUILD_SHARED ON CACHE BOOL "" FORCE)
-            set(HUXERUI_BUILD_STATIC OFF CACHE BOOL "" FORCE)
-        else ()
-            set(HUXERUI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-            set(HUXERUI_BUILD_STATIC ON CACHE BOOL "" FORCE)
-        endif ()
-        add_subdirectory("${HUXERUI_HOME}" "${CMAKE_BINARY_DIR}/huxerui-sdk" EXCLUDE_FROM_ALL)
-    else ()
-        if (HUXERUI_HOME)
-            find_package(HuxerUI CONFIG REQUIRED
-                    PATHS "${HUXERUI_HOME}"
-                    NO_DEFAULT_PATH
-                    NO_CMAKE_FIND_ROOT_PATH
-            )
-        else ()
-            find_package(HuxerUI CONFIG REQUIRED)
-        endif ()
-    endif ()
+include("${CMAKE_CURRENT_SOURCE_DIR}/HuxerUIProject.cmake")
+if (HUXERUI_PROJECT_PLAN_ONLY)
+    return()
 endif ()
-
-# SweetEditor — third-party cross-platform editor core (C++17, vendored).
-set(SWEETEDITOR_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/include")
-if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
-    include(FetchContent)
-    set(SWEETEDITOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_STATIC ON CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_ANDROID_JNI OFF CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_APPLE_FRAMEWORK OFF CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_WASM_C_ABI OFF CACHE BOOL "" FORCE)
-    set(SWEETEDITOR_BUILD_WASM_EMBIND OFF CACHE BOOL "" FORCE)
-
-    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        # The bundled Linux simdutf archive was built with a newer libstdc++
-        # than our libc++ toolchain's runtime contract. Build the matching
-        # v7.7.0 source with the consumer toolchain, then let SweetEditor merge
-        # that archive into its static library as it does on other platforms.
-        set(SIMDUTF_TESTS OFF CACHE BOOL "" FORCE)
-        set(SIMDUTF_TOOLS OFF CACHE BOOL "" FORCE)
-        set(SIMDUTF_BENCHMARKS OFF CACHE BOOL "" FORCE)
-        set(SIMDUTF_FUZZERS OFF CACHE BOOL "" FORCE)
-        set(_codeeditor_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
-        set(BUILD_SHARED_LIBS OFF)
-        FetchContent_Declare(codeeditor_simdutf_source
-            GIT_REPOSITORY https://github.com/simdutf/simdutf.git
-            GIT_TAG 94fb52ea0219cb37092d8ae294b4702bacf5d8df
-            GIT_SHALLOW FALSE
-        )
-        FetchContent_MakeAvailable(codeeditor_simdutf_source)
-        set(BUILD_SHARED_LIBS "${_codeeditor_saved_build_shared_libs}")
-        if (NOT TARGET simdutf)
-            message(FATAL_ERROR "Pinned simdutf source did not define target simdutf")
-        endif ()
-        add_library(SweetEditor3p::Simdutf ALIAS simdutf)
-    endif ()
-
-    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor/CMakeLists.txt")
-        add_subdirectory(
-            "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor"
-            "${CMAKE_BINARY_DIR}/sweeteditor"
-            EXCLUDE_FROM_ALL
-        )
-    else ()
-        FetchContent_Declare(
-            sweeteditor_source
-            GIT_REPOSITORY https://github.com/FinalScave/SweetEditor.git
-            GIT_TAG bd4330e70eda5c71b71ecac54cf7312d82d2eae2
-            GIT_SHALLOW FALSE
-            # logging.hpp routes Apple logging through os/log.h, which
-            # hard-errors under GCC, so the patch restricts it to clang.
-            # Nested 3dparty checkouts must carry the same patch (see
-            # 3dparty/patches/).
-            PATCH_COMMAND bash -c "git apply -R --check '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch' 2>/dev/null || git apply '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch'"
-        )
-        FetchContent_MakeAvailable(sweeteditor_source)
-        # The public header includes <sweeteditor/decoration.h>; point
-        # consumers at the fetched copy instead of the empty vendored dir.
-        set(SWEETEDITOR_INCLUDE_DIR "${sweeteditor_source_SOURCE_DIR}/include")
-    endif ()
-
-    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        # SweetEditor includes <simdutf/simdutf.h>; simdutf's source release
-        # exposes the equivalent header as <simdutf.h>. Reuse the matching
-        # v7.7.0 compatibility headers shipped with SweetEditor.
-        set(_codeeditor_simdutf_compat_include
-            "${SWEETEDITOR_INCLUDE_DIR}/../3dparty/simdutf/include")
-        if (NOT EXISTS "${_codeeditor_simdutf_compat_include}/simdutf/simdutf.h")
-            message(FATAL_ERROR
-                "Missing SweetEditor simdutf compatibility header: ${_codeeditor_simdutf_compat_include}")
-        endif ()
-        target_include_directories(simdutf INTERFACE
-            "$<BUILD_INTERFACE:${_codeeditor_simdutf_compat_include}>")
-    endif ()
-endif ()
-
-# SweetLine is intentionally NOT a dependency: highlighting plugs in through
-# the CodeEditorDecorationProvider interface (see examples/preview for the
-# optional SweetLine integration).
 
 file(GLOB_RECURSE LIBRARY_SOURCE_FILES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -137,118 +20,104 @@ file(GLOB_RECURSE LIBRARY_SOURCE_FILES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
 )
 
-set(HUXERUI_LIBRARY_GRAPH_OUTPUT
-        "${CMAKE_CURRENT_SOURCE_DIR}/.huxerui/generated/libraries.json"
-)
-
 huxerui_add_library(codeeditor
         SOURCES
             ${LIBRARY_SOURCE_FILES}
 )
+
 add_library(HuxerUI::CodeEditor ALIAS codeeditor)
 
-# Graph discovery creates an INTERFACE target and performs no native build.
 if (HUXERUI_LIBRARY_GRAPH_ONLY)
     return()
 endif ()
 
-option(HUXERUI_CODEEDITOR_TRACE "Enable editor input diagnostics" OFF)
-if (HUXERUI_CODEEDITOR_TRACE)
-    target_compile_definitions(codeeditor PRIVATE CODEEDITOR_TRACE_ENABLED)
+set(SWEETEDITOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_ANDROID_JNI OFF CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_APPLE_FRAMEWORK OFF CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_WASM_C_ABI OFF CACHE BOOL "" FORCE)
+set(SWEETEDITOR_BUILD_WASM_EMBIND OFF CACHE BOOL "" FORCE)
+include(cmake/CodeEditorVendor.cmake)
+set(SWEETEDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3dparty/SweetEditor")
+if (NOT EXISTS "${SWEETEDITOR_SOURCE_DIR}/CMakeLists.txt")
+    include(FetchContent)
+    FetchContent_Declare(codeeditor_sweeteditor_source
+        GIT_REPOSITORY https://github.com/FinalScave/SweetEditor.git
+        GIT_TAG bd4330e70eda5c71b71ecac54cf7312d82d2eae2
+        SOURCE_SUBDIR codeeditor-vendor
+        PATCH_COMMAND bash -c "git apply -R --check '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch' 2>/dev/null || git apply '${CMAKE_CURRENT_LIST_DIR}/3dparty/patches/sweeteditor-oslog-gcc.patch'"
+    )
+    FetchContent_MakeAvailable(codeeditor_sweeteditor_source)
+    set(SWEETEDITOR_SOURCE_DIR "${codeeditor_sweeteditor_source_SOURCE_DIR}")
 endif ()
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT TARGET SweetEditor3p::Simdutf)
+    include(FetchContent)
+    # Build the matching simdutf with the same C++ runtime as the editor.
+    set(SIMDUTF_TESTS OFF CACHE BOOL "" FORCE)
+    set(SIMDUTF_TOOLS OFF CACHE BOOL "" FORCE)
+    set(SIMDUTF_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(SIMDUTF_FUZZERS OFF CACHE BOOL "" FORCE)
+    set(_codeeditor_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
+    FetchContent_Declare(codeeditor_simdutf_source
+        GIT_REPOSITORY https://github.com/simdutf/simdutf.git
+        GIT_TAG 94fb52ea0219cb37092d8ae294b4702bacf5d8df
+    )
+    FetchContent_MakeAvailable(codeeditor_simdutf_source)
+    set(BUILD_SHARED_LIBS "${_codeeditor_saved_build_shared_libs}")
+    add_library(SweetEditor3p::Simdutf ALIAS simdutf)
+    target_include_directories(simdutf INTERFACE
+        "$<BUILD_INTERFACE:${SWEETEDITOR_SOURCE_DIR}/3dparty/simdutf/include>"
+    )
+endif ()
+
+codeeditor_add_vendor("${SWEETEDITOR_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/sweeteditor")
+
+target_compile_features(codeeditor PUBLIC cxx_std_20)
+target_include_directories(codeeditor PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+        "$<INSTALL_INTERFACE:include>"
+)
+target_link_libraries(codeeditor PUBLIC SweetEditor::sweeteditor_static)
 
 # windows.h defines min/max macros (breaking std::min/std::max in the vendored
 # editor headers) and, through rpcndr.h, a `small` macro (breaking theme.h
 # fields such as `float small`). NOMINMAX keeps the std versions intact and
 # WIN32_LEAN_AND_MEAN keeps rpcndr.h out; both match upstream configurations.
 if (WIN32)
-    # The public SweetEditor headers require the same macro policy in consumers.
     target_compile_definitions(codeeditor PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif ()
 
-# Detect optional APIs in the headers of the linked framework target.
-get_target_property(HUXERUI_INCLUDE_DIRECTORIES HuxerUI::huxerui INTERFACE_INCLUDE_DIRECTORIES)
-foreach (HUXERUI_INCLUDE_DIRECTORY IN LISTS HUXERUI_INCLUDE_DIRECTORIES)
-    string(REGEX REPLACE "^\\$<BUILD_INTERFACE:(.*)>$" "\\1"
-            HUXERUI_INCLUDE_DIRECTORY "${HUXERUI_INCLUDE_DIRECTORY}")
-    file(GLOB HUXERUI_PUBLIC_HEADERS "${HUXERUI_INCLUDE_DIRECTORY}/huxerui/*.h")
-    foreach (HUXERUI_HEADER ${HUXERUI_PUBLIC_HEADERS})
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${HUXERUI_HEADER}")
-        file(READ "${HUXERUI_HEADER}" HUXERUI_HEADER_CONTENT)
-        if (HUXERUI_HEADER_CONTENT MATCHES "ShouldCommitFocusOnPointerUp")
-            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SHOULD_COMMIT_FOCUS_ON_POINTER_UP)
-        endif ()
-        if (HUXERUI_HEADER_CONTENT MATCHES "struct ScrollInputEvent")
-            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_SCROLL_INPUT_EVENT)
-        endif ()
-        if (HUXERUI_HEADER_CONTENT MATCHES "enum class TextEditingActionStatus")
-            target_compile_definitions(codeeditor PRIVATE CODEEDITOR_HAS_TEXT_EDITING_ACTION_STATUS)
-        endif ()
-    endforeach ()
-endforeach ()
-
-if (NOT HUXERUI_LIBRARY_GRAPH_ONLY)
-    target_link_libraries(
-        codeeditor
-        PRIVATE
-            SweetEditor::sweeteditor_static
-    )
-    if (ANDROID)
-        # android/log.h diagnostics for on-device tracing.
-        target_link_libraries(codeeditor PRIVATE log)
-    endif ()
-
-    # SweetEditor merges simdutf's static archive into sweeteditor_static at
-    # post-build time. Its original private link edge is then redundant, and
-    # the iOS link-manifest generator cannot resolve that nested imported
-    # target in the app graph. Preserve all other system/header dependencies.
-    if (TARGET sweeteditor_static AND TARGET SweetEditor3p::Simdutf)
-        foreach (_property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
-            get_property(_links TARGET sweeteditor_static PROPERTY "${_property}")
-            if (_links)
-                list(FILTER _links EXCLUDE REGEX "SweetEditor3p::Simdutf")
-                set_property(TARGET sweeteditor_static PROPERTY "${_property}" "${_links}")
-            endif ()
-        endforeach ()
-    endif ()
+if (ANDROID)
+    target_link_libraries(codeeditor PRIVATE log)
 endif ()
 
-target_include_directories(codeeditor PUBLIC
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-        "$<BUILD_INTERFACE:${SWEETEDITOR_INCLUDE_DIR}>"
-        "$<INSTALL_INTERFACE:include>"
-)
-
-# Component tests exercise pure public-API logic (options validation,
-# disconnected controller behavior, theme derivation). They require the
-# Catch2 amalgamation shipped with a source HuxerUI checkout; an installed
-# SDK build skips them.
+# Build the public API tests by default for standalone desktop builds.
 set(HUXERUI_CODEEDITOR_DEFAULT_TESTS OFF)
-if (NOT HUXERUI_LIBRARY_GRAPH_ONLY AND NOT EMSCRIPTEN AND NOT IOS AND NOT ANDROID
-        AND HUXERUI_HOME AND TARGET HuxerUI::huxerui_static
-        AND EXISTS "${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
+if (NOT CMAKE_CROSSCOMPILING AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(HUXERUI_CODEEDITOR_DEFAULT_TESTS ON)
 endif ()
 option(HUXERUI_CODEEDITOR_BUILD_TESTS "Build CodeEditor component tests" ${HUXERUI_CODEEDITOR_DEFAULT_TESTS})
 if (HUXERUI_CODEEDITOR_BUILD_TESTS)
+    if (NOT TARGET HuxerUI::testing)
+        find_package(HuxerUI 0.4 CONFIG REQUIRED COMPONENTS testing)
+    endif ()
     enable_testing()
-    include("${HUXERUI_HOME}/3dparty/catch2/huxerui_3p.cmake")
     add_executable(codeeditor_tests
             tests/test_main.cpp
             tests/test_options_validation.cpp
             tests/test_editor_controller.cpp
             tests/test_editor_document.cpp
+            tests/test_editor_runtime.cpp
             tests/test_editor_theme.cpp
     )
     target_link_libraries(codeeditor_tests
             PRIVATE
                 codeeditor
-                HuxerUI::huxerui_static
-                huxerui_3p_catch2
+                HuxerUI::testing
+                SweetEditor3p::Catch2
     )
-    if (TARGET HuxerUI::testing)
-        target_sources(codeeditor_tests PRIVATE tests/test_editor_runtime.cpp)
-        target_link_libraries(codeeditor_tests PRIVATE HuxerUI::testing)
-    endif ()
     add_test(NAME codeeditor_tests COMMAND codeeditor_tests)
 endif ()
